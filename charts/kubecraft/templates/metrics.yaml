@@ -1,0 +1,57 @@
+{{- if .Values.metrics.enabled }}
+# Internal Services for scraping, kept apart from the UI and game Services.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "kubecraft.fullname" . }}-metrics
+  labels:
+    {{- include "kubecraft.labels" . | nindent 4 }}
+    app.kubernetes.io/component: metrics
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "kubecraft.managerSelector" . | nindent 4 }}
+  ports:
+    - name: metrics
+      port: {{ .Values.metrics.port }}
+      targetPort: metrics
+{{- if and .Values.mcRouter.enabled .Values.mcRouter.metrics }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "kubecraft.routerName" . }}-metrics
+  labels:
+    {{- include "kubecraft.labels" . | nindent 4 }}
+    app.kubernetes.io/component: metrics
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "kubecraft.routerSelector" . | nindent 4 }}
+  ports:
+    - name: metrics
+      port: 8080
+      targetPort: metrics
+{{- end }}
+{{- if .Values.metrics.serviceMonitor.enabled }}
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "kubecraft.fullname" . }}
+  labels:
+    {{- include "kubecraft.labels" . | nindent 4 }}
+    {{- with .Values.metrics.serviceMonitor.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/component: metrics
+  endpoints:
+    - port: metrics
+      path: /metrics
+      interval: {{ .Values.metrics.serviceMonitor.interval }}
+{{- end }}
+{{- end }}

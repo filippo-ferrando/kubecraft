@@ -1,0 +1,164 @@
+# On a tag like v1.2.0: test, push the image and the Helm chart to the Forgejo
+# registry, and publish a release with the changes since the previous tag.
+#
+# Repository secret LOCAL_TOKEN: an access token of the user that pushes the tag, with write:package.
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+env:
+  REGISTRY: git.internal.fferrando.cc
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: test
+    env:
+      TEST_DATABASE_URL: postgres://test:test@postgres:5432/test?sslmode=disable
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - uses: azure/setup-helm@v4
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Wait for postgres
+        run: |
+          for i in $(seq 30); do
+            (echo > /dev/tcp/postgres/5432) 2>/dev/null && exit 0
+            sleep 1
+          done
+          exit 1
+
+      - name: Go tests
+        run: go test -count=1 ./...
+
+      - name: Web checks
+        working-directory: web
+        run: |
+          npm ci --no-audit --no-fund
+          npm run check
+          npm test
+
+      - name: Lint chart
+        run: make chart-lint-local
+
+  # One image runs the manager and, in "files" mode, the per-server file sidecar.
+  image:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install Docker CLI
+        run: curl -fsSL https://get.docker.com | sh
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Login to Forgejo registry
+        run: |
+          echo "${{ secrets.LOCAL_TOKEN }}" | docker login ${{ env.REGISTRY }} \
+            -u "${{ github.actor }}" \
+            --password-stdin
+
+      # Only final versions move the short tags, a v1.2.0-rc1 keeps them where they are.
+      - name: Pick image tags
+        id: tags
+        env:
+          TAG: ${{ github.ref_name }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          image=$(echo "$REGISTRY/$REPOSITORY" | tr '[:upper:]' '[:lower:]')
+          {
+            echo "list<<EOF"
+            echo "$image:$TAG"
+            echo "$image:${TAG#v}"
+            case $TAG in
+              *-*) ;;
+              *) minor=${TAG%.*}; echo "$image:${minor#v}"; echo "$image:latest" ;;
+            esac
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          platforms: linux/amd64
+          build-args: |
+            VERSION=${{ github.ref_name }}
+          tags: ${{ steps.tags.outputs.list }}
+
+  # The chart gets the version of the tag; its default image is the one pushed above.
+  chart:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: azure/setup-helm@v4
+
+      - name: Package and push chart
+        env:
+          TAG: ${{ github.ref_name }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          owner=$(echo "${REPOSITORY%%/*}" | tr '[:upper:]' '[:lower:]')
+          echo "${{ secrets.LOCAL_TOKEN }}" | helm registry login "$REGISTRY" -u "${{ github.actor }}" --password-stdin
+          helm package charts/kubecraft --version "${TAG#v}" --app-version "$TAG" -d out
+          helm push "out/kubecraft-${TAG#v}.tgz" "oci://$REGISTRY/$owner"
+
+  release:
+    needs: [image, chart]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Write release notes
+        env:
+          TAG: ${{ github.ref_name }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          prev=$(git describe --tags --abbrev=0 "$TAG^" 2>/dev/null || true)
+          owner=$(echo "${REPOSITORY%%/*}" | tr '[:upper:]' '[:lower:]')
+          image=$(echo "$REGISTRY/$REPOSITORY" | tr '[:upper:]' '[:lower:]')
+          {
+            echo "Image: \`$image:$TAG\`"
+            echo
+            echo "Helm chart: \`helm install kubecraft oci://$REGISTRY/$owner/kubecraft --version ${TAG#v}\`"
+            echo
+            echo "Changes${prev:+ since $prev}:"
+            echo
+            git log --pretty='- %s' ${prev:+"$prev.."}"$TAG"
+          } > notes.md
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v3
+        with:
+          body_path: notes.md
+          prerelease: ${{ contains(github.ref_name, '-') }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

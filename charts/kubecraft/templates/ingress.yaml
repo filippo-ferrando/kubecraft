@@ -1,0 +1,73 @@
+{{- if .Values.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "kubecraft.fullname" . }}
+  labels:
+    {{- include "kubecraft.labels" . | nindent 4 }}
+  {{- with .Values.ingress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- with .Values.ingress.className }}
+  ingressClassName: {{ . }}
+  {{- end }}
+  {{- if .Values.ingress.tls.enabled }}
+  tls:
+    - hosts: [{{ .Values.manager.uiHost | quote }}]
+      secretName: {{ .Values.ingress.tls.secretName }}
+  {{- end }}
+  rules:
+    - host: {{ .Values.manager.uiHost | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "kubecraft.fullname" . }}
+                port:
+                  name: http
+{{- end }}
+{{- if .Values.ingressRoute.enabled }}
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: {{ include "kubecraft.fullname" . }}
+  labels:
+    {{- include "kubecraft.labels" . | nindent 4 }}
+spec:
+  entryPoints:
+    {{- toYaml .Values.ingressRoute.entryPoints | nindent 4 }}
+  routes:
+    - match: Host(`{{ .Values.manager.uiHost }}`)
+      kind: Rule
+      {{- with .Values.ingressRoute.middlewares }}
+      middlewares:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      services:
+        - name: {{ include "kubecraft.fullname" . }}
+          port: {{ .Values.service.port }}
+  {{- with .Values.ingressRoute.tls.secretName }}
+  tls:
+    secretName: {{ . }}
+  {{- end }}
+{{- end }}
+{{- if .Values.certificate.enabled }}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ include "kubecraft.fullname" . }}
+  labels:
+    {{- include "kubecraft.labels" . | nindent 4 }}
+spec:
+  secretName: {{ .Values.certificate.secretName }}
+  issuerRef:
+    {{- toYaml .Values.certificate.issuerRef | nindent 4 }}
+  dnsNames:
+    - {{ .Values.manager.uiHost | quote }}
+{{- end }}

@@ -1,0 +1,31 @@
+# ArgoCD Application installing the kubecraft OCI chart, with values from the homelab repo.
+# Same layout as infrastructure/lastgasp/application.yaml.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kubecraft
+  namespace: argocd
+  annotations:
+    # After the CNPG role and database (waves 3-4).
+    argocd.argoproj.io/sync-wave: "5"
+spec:
+  project: default
+  sources:
+    - chart: kubecraft
+      repoURL: git.fferrando.cc/rdfilippo
+      targetRevision: 0.1.0
+      helm:
+        valueFiles:
+          - $values/infrastructure/kubecraft/values.yaml
+    - repoURL: "https://github.com/filippo-ferrando/k3s-homelab.git"
+      targetRevision: HEAD
+      ref: values
+  destination:
+    server: "https://kubernetes.default.svc"
+    namespace: minecraft
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

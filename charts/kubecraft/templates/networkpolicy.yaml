@@ -1,0 +1,77 @@
+{{- if .Values.networkPolicy.enabled }}
+# Manager: only the ingress controller reaches the UI/API.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "kubecraft.fullname" . }}-manager
+  labels:
+    {{- include "kubecraft.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "kubecraft.managerSelector" . | nindent 6 }}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        {{- toYaml .Values.networkPolicy.managerFrom | nindent 8 }}
+      ports:
+        - port: 8080
+    {{- if .Values.metrics.enabled }}
+    - from:
+        {{- toYaml .Values.networkPolicy.metricsFrom | nindent 8 }}
+      ports:
+        - port: {{ .Values.metrics.port }}
+    {{- end }}
+---
+# mc-router: open on the Minecraft port, exposure is decided by its Service.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "kubecraft.fullname" . }}-mc-router
+  labels:
+    {{- include "kubecraft.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "kubecraft.routerSelector" . | nindent 6 }}
+  policyTypes: [Ingress]
+  ingress:
+    - ports:
+        - port: 25565
+    {{- if .Values.mcRouter.metrics }}
+    - from:
+        {{- toYaml .Values.networkPolicy.metricsFrom | nindent 8 }}
+      ports:
+        - port: 8080
+    {{- end }}
+---
+# Game servers: game port from mc-router and the manager, RCON and files from the manager only.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "kubecraft.fullname" . }}-servers
+  labels:
+    {{- include "kubecraft.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/managed-by: mc-manager
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "kubecraft.routerSelector" . | nindent 14 }}
+        - podSelector:
+            matchLabels:
+              {{- include "kubecraft.managerSelector" . | nindent 14 }}
+      ports:
+        - port: 25565
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "kubecraft.managerSelector" . | nindent 14 }}
+      ports:
+        - port: 25575
+        - port: 8081
+{{- end }}

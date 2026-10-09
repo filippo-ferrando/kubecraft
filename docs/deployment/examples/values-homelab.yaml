@@ -1,0 +1,73 @@
+# kubecraft values for the k3s homelab (Tailscale-only access).
+# Install: helm install kubecraft oci://git.internal.fferrando.cc/rdfilippo/kubecraft -n minecraft -f values-homelab.yaml
+
+manager:
+  uiHost: mine.internal.fferrando.cc
+  serverBaseDomain: mine.internal.fferrando.cc
+  # Replicated Longhorn volumes for worlds.
+  storageClass: longhorn
+  defaultMaxServers: 2
+  # Pin the server image so all servers change together on purpose.
+  minecraftImageTag: latest
+
+# Created with examples/secrets.sh and sealed.
+secrets:
+  existingSecret: kubecraft-secrets
+
+# Shared CloudNativePG cluster; role and database from examples/cnpg-database.yaml.
+database:
+  host: homelab-db-rw.database.svc.cluster.local
+  name: kubecraft
+  sslmode: require
+  credentialsSecret:
+    name: kubecraft-db-credentials
+
+# Traefik websecure entrypoint, reachable from LAN and tailnet only.
+ingressRoute:
+  enabled: true
+  entryPoints: [websecure]
+  tls:
+    secretName: kubecraft-internal-tls
+
+certificate:
+  enabled: true
+  secretName: kubecraft-internal-tls
+  issuerRef:
+    name: letsencrypt-cloudflare
+    kind: ClusterIssuer
+
+mcRouter:
+  # k3s ServiceLB opens 25565 on the nodes; nothing forwards it from the internet.
+  service:
+    type: LoadBalancer
+  autoScale:
+    enabled: true
+    downAfter: 15m
+  metrics: true
+
+metrics:
+  serviceMonitor:
+    enabled: true
+    labels:
+      release: kube-prometheus-stack
+
+# Size for the nodes; each server reserves its plan memory plus 32Mi.
+resourceQuota:
+  hard:
+    requests.cpu: "8"
+    limits.cpu: "16"
+    requests.memory: 24Gi
+    limits.memory: 24Gi
+    requests.storage: 200Gi
+    persistentvolumeclaims: "20"
+    pods: "30"
+
+networkPolicy:
+  managerFrom:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: traefik
+  metricsFrom:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: monitoring

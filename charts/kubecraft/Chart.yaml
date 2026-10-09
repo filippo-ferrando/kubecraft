@@ -1,0 +1,7 @@
+apiVersion: v2
+name: kubecraft
+description: Multi-user Minecraft server manager for Kubernetes, with mc-router for hostname routing.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords: [minecraft, k3s, mc-router]

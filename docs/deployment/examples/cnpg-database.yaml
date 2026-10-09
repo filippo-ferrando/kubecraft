@@ -1,0 +1,34 @@
+# Login and database for kubecraft on the shared CloudNativePG cluster.
+# The password comes from kubecraft-db-credentials in the database namespace (see secrets.sh).
+apiVersion: postgresql.cnpg.io/v1
+kind: DatabaseRole
+metadata:
+  name: kubecraft-user
+  namespace: database
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+spec:
+  cluster:
+    name: homelab-db
+  name: kubecraft
+  login: true
+  passwordSecret:
+    name: kubecraft-db-credentials
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: Database
+metadata:
+  name: kubecraft
+  namespace: database
+  annotations:
+    argocd.argoproj.io/sync-wave: "4"
+spec:
+  name: kubecraft
+  owner: kubecraft
+  cluster:
+    name: homelab-db
+---
+# Add this entry to apps/database/networkpolicy.yaml so the manager can reach Postgres:
+#   - namespaceSelector:
+#       matchLabels:
+#         kubernetes.io/metadata.name: minecraft

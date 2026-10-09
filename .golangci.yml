@@ -1,0 +1,27 @@
+version: "2"
+linters:
+  enable:
+    - bodyclose
+    - errorlint
+    - gosec
+    - misspell
+    - noctx
+    - revive
+    - unconvert
+  settings:
+    gosec:
+      excludes:
+        - G115 # int conversions are bounded by DB constraints
+  exclusions:
+    presets:
+      - comments
+      - std-error-handling
+    paths:
+      - internal/db/sqlc
+    rules:
+      - path: _test\.go
+        linters: [gosec, noctx, bodyclose]
+formatters:
+  enable:
+    - gofmt
+    - goimports

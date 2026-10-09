@@ -1,0 +1,177 @@
+# Manager image (API + UI in one container).
+image:
+  repository: git.fferrando.cc/rdfilippo/kubecraft
+  # Defaults to the chart appVersion.
+  tag: ""
+  pullPolicy: IfNotPresent
+imagePullSecrets: []
+
+manager:
+  # Keep at 1: the reconciler and the login rate limiter are per process.
+  replicas: 1
+  logLevel: info
+  # Host of the UI, also used for the CSRF and WebSocket origin check.
+  uiHost: mine.example.com
+  # Servers are reachable at <slug>.<serverBaseDomain>.
+  serverBaseDomain: mine.example.com
+  cookieSecure: true
+  sessionTTL: 168h
+  # Extra origins accepted for state-changing requests, comma separated.
+  allowedOrigins: ""
+  jvmHeapRatio: "0.75"
+  defaultMaxServers: 2
+  # Storage class for world volumes, empty uses the cluster default.
+  storageClass: ""
+  minecraftImage: itzg/minecraft-server
+  minecraftImageTag: latest
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+  extraEnv: []
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  podAnnotations: {}
+
+# Secret with SESSION_SECRET and optionally BOOTSTRAP_ADMIN_USER / BOOTSTRAP_ADMIN_PASSWORD.
+secrets:
+  existingSecret: ""
+  # Only used when existingSecret is empty. Fine for testing, use a real secret otherwise.
+  sessionSecret: ""
+  bootstrapAdminUser: ""
+  bootstrapAdminPassword: ""
+
+database:
+  # Option 1: a secret key holding a full postgres:// URL.
+  urlSecret:
+    name: ""
+    key: DATABASE_URL
+  # Option 2: host settings here, user and password from a secret (for example a CNPG role secret).
+  host: ""
+  port: 5432
+  name: kubecraft
+  sslmode: prefer
+  credentialsSecret:
+    name: ""
+    usernameKey: username
+    passwordKey: password
+
+service:
+  type: ClusterIP
+  port: 80
+
+# Plain Kubernetes Ingress.
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  tls:
+    enabled: true
+    secretName: kubecraft-tls
+
+# Traefik IngressRoute, as an alternative to ingress.
+ingressRoute:
+  enabled: false
+  entryPoints: [websecure]
+  middlewares: []
+  tls:
+    secretName: kubecraft-tls
+
+# cert-manager Certificate for the UI host.
+certificate:
+  enabled: false
+  secretName: kubecraft-tls
+  issuerRef:
+    name: letsencrypt
+    kind: ClusterIssuer
+
+mcRouter:
+  enabled: true
+  image:
+    repository: itzg/mc-router
+    tag: "1.47.2"
+    pullPolicy: IfNotPresent
+  service:
+    # LoadBalancer works with k3s servicelb. NodePort or ClusterIP are also possible.
+    type: LoadBalancer
+    port: 25565
+    nodePort: null
+    loadBalancerIP: ""
+    externalTrafficPolicy: Cluster
+    annotations: {}
+  # Prometheus metrics on :8080/metrics.
+  metrics: false
+  # Stop idle servers and start them again when a player joins. Each server opts in
+  # with its "Auto sleep" setting; stopped servers are never woken.
+  autoScale:
+    enabled: true
+    downAfter: 15m
+  extraArgs: []
+  resources:
+    requests:
+      cpu: 20m
+      memory: 32Mi
+    limits:
+      cpu: 500m
+      memory: 128Mi
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+# File sidecar next to each server, for world downloads and config file editing.
+# It runs the manager image in "files" mode.
+files:
+  enabled: true
+
+# Hard caps for the whole namespace, a backstop if the manager misbehaves.
+resourceQuota:
+  enabled: true
+  hard:
+    requests.cpu: "8"
+    limits.cpu: "16"
+    requests.memory: 24Gi
+    limits.memory: 24Gi
+    requests.storage: 200Gi
+    persistentvolumeclaims: "20"
+    pods: "30"
+
+# Defaults for containers that do not set resources.
+limitRange:
+  enabled: true
+  default:
+    cpu: 500m
+    memory: 512Mi
+  defaultRequest:
+    cpu: 100m
+    memory: 128Mi
+  max:
+    cpu: "8"
+    memory: 16Gi
+
+# Prometheus metrics of the manager (and of mc-router when mcRouter.metrics is true).
+# Served on a separate port that the ingress never routes to.
+metrics:
+  enabled: true
+  port: 9090
+  serviceMonitor:
+    enabled: false
+    interval: 30s
+    # Extra labels so the Prometheus operator picks it up, e.g. release: kube-prometheus-stack
+    labels: {}
+
+networkPolicy:
+  enabled: true
+  # Namespaces allowed to scrape metrics.
+  metricsFrom:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: monitoring
+  # Namespaces allowed to reach the manager (the ingress controller).
+  managerFrom:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: traefik

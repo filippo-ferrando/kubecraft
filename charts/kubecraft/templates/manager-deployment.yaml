@@ -1,0 +1,158 @@
+{{- $db := .Values.database -}}
+{{- if and (not $db.urlSecret.name) (not $db.host) }}
+{{- fail "set database.urlSecret.name or database.host" }}
+{{- end }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "kubecraft.fullname" . }}
+  labels:
+    {{- include "kubecraft.baseLabels" . | nindent 4 }}
+    {{- include "kubecraft.managerSelector" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.manager.replicas }}
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "kubecraft.managerSelector" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "kubecraft.baseLabels" . | nindent 8 }}
+        {{- include "kubecraft.managerSelector" . | nindent 8 }}
+      annotations:
+        {{- if not .Values.secrets.existingSecret }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+        {{- end }}
+        {{- with .Values.manager.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ include "kubecraft.fullname" . }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: manager
+          image: {{ include "kubecraft.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- include "kubecraft.containerSecurity" . | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: 8080
+            {{- if .Values.metrics.enabled }}
+            - name: metrics
+              containerPort: {{ .Values.metrics.port }}
+            {{- end }}
+          envFrom:
+            - secretRef:
+                name: {{ include "kubecraft.secretName" . }}
+          env:
+            - name: K8S_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: UI_HOST
+              value: {{ .Values.manager.uiHost | quote }}
+            - name: SERVER_BASE_DOMAIN
+              value: {{ .Values.manager.serverBaseDomain | quote }}
+            - name: COOKIE_SECURE
+              value: {{ .Values.manager.cookieSecure | quote }}
+            - name: SESSION_TTL
+              value: {{ .Values.manager.sessionTTL | quote }}
+            - name: ALLOWED_ORIGINS
+              value: {{ .Values.manager.allowedOrigins | quote }}
+            - name: JVM_HEAP_RATIO
+              value: {{ .Values.manager.jvmHeapRatio | quote }}
+            - name: DEFAULT_MAX_SERVERS
+              value: {{ .Values.manager.defaultMaxServers | quote }}
+            - name: STORAGE_CLASS
+              value: {{ .Values.manager.storageClass | quote }}
+            - name: MC_IMAGE
+              value: {{ .Values.manager.minecraftImage | quote }}
+            - name: MC_IMAGE_TAG
+              value: {{ .Values.manager.minecraftImageTag | quote }}
+            - name: FILES_IMAGE
+              value: {{ if .Values.files.enabled }}{{ include "kubecraft.image" . | quote }}{{ else }}""{{ end }}
+            - name: AUTO_SLEEP
+              value: {{ and .Values.mcRouter.enabled .Values.mcRouter.autoScale.enabled | quote }}
+            - name: AUTO_SLEEP_IDLE
+              value: {{ .Values.mcRouter.autoScale.downAfter | quote }}
+            - name: METRICS_ADDR
+              value: {{ if .Values.metrics.enabled }}{{ printf ":%v" .Values.metrics.port | quote }}{{ else }}""{{ end }}
+            - name: LOG_LEVEL
+              value: {{ .Values.manager.logLevel | quote }}
+            {{- if $db.urlSecret.name }}
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $db.urlSecret.name }}
+                  key: {{ $db.urlSecret.key }}
+            {{- else }}
+            - name: PGHOST
+              value: {{ $db.host | quote }}
+            - name: PGPORT
+              value: {{ $db.port | quote }}
+            - name: PGDATABASE
+              value: {{ $db.name | quote }}
+            - name: PGSSLMODE
+              value: {{ $db.sslmode | quote }}
+            - name: PGUSER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ required "database.credentialsSecret.name is required with database.host" $db.credentialsSecret.name }}
+                  key: {{ $db.credentialsSecret.usernameKey }}
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $db.credentialsSecret.name }}
+                  key: {{ $db.credentialsSecret.passwordKey }}
+            {{- end }}
+            {{- with .Values.manager.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 2
+            failureThreshold: 60
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.manager.resources | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+      {{- with .Values.manager.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.manager.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.manager.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

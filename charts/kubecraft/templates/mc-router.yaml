@@ -1,0 +1,154 @@
+{{- if .Values.mcRouter.enabled }}
+{{- $name := include "kubecraft.routerName" . -}}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "kubecraft.labels" . | nindent 4 }}
+---
+# Services for hostname discovery, StatefulSet scaling when auto sleep is on.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "kubecraft.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["get", "list", "watch"]
+  {{- if .Values.mcRouter.autoScale.enabled }}
+  # Scale opted-in servers between 0 and 1.
+  - apiGroups: ["apps"]
+    resources: ["statefulsets"]
+    verbs: ["get", "list", "watch", "patch"]
+  - apiGroups: ["apps"]
+    resources: ["statefulsets/scale"]
+    verbs: ["get"]
+  {{- end }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "kubecraft.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ $name }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ $name }}
+    namespace: {{ .Release.Namespace }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "kubecraft.baseLabels" . | nindent 4 }}
+    {{- include "kubecraft.routerSelector" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "kubecraft.routerSelector" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "kubecraft.baseLabels" . | nindent 8 }}
+        {{- include "kubecraft.routerSelector" . | nindent 8 }}
+    spec:
+      serviceAccountName: {{ $name }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: mc-router
+          image: "{{ .Values.mcRouter.image.repository }}:{{ .Values.mcRouter.image.tag }}"
+          imagePullPolicy: {{ .Values.mcRouter.image.pullPolicy }}
+          securityContext:
+            {{- include "kubecraft.containerSecurity" . | nindent 12 }}
+          args:
+            - --in-kube-cluster
+            {{- if .Values.mcRouter.autoScale.enabled }}
+            - --auto-scale-up
+            - --auto-scale-down
+            - --auto-scale-down-after={{ .Values.mcRouter.autoScale.downAfter }}
+            {{- end }}
+            {{- if .Values.mcRouter.metrics }}
+            - --metrics-backend=prometheus
+            - --api-binding=:8080
+            {{- end }}
+            {{- range .Values.mcRouter.extraArgs }}
+            - {{ . | quote }}
+            {{- end }}
+          env:
+            - name: KUBE_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          ports:
+            - name: minecraft
+              containerPort: 25565
+            {{- if .Values.mcRouter.metrics }}
+            - name: metrics
+              containerPort: 8080
+            {{- end }}
+          readinessProbe:
+            tcpSocket:
+              port: minecraft
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: minecraft
+            periodSeconds: 30
+          resources:
+            {{- toYaml .Values.mcRouter.resources | nindent 12 }}
+      {{- with .Values.mcRouter.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.mcRouter.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.mcRouter.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "kubecraft.labels" . | nindent 4 }}
+  {{- with .Values.mcRouter.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.mcRouter.service.type }}
+  {{- if ne .Values.mcRouter.service.type "ClusterIP" }}
+  externalTrafficPolicy: {{ .Values.mcRouter.service.externalTrafficPolicy }}
+  {{- end }}
+  {{- with .Values.mcRouter.service.loadBalancerIP }}
+  loadBalancerIP: {{ . }}
+  {{- end }}
+  selector:
+    {{- include "kubecraft.routerSelector" . | nindent 4 }}
+  ports:
+    - name: minecraft
+      port: {{ .Values.mcRouter.service.port }}
+      targetPort: minecraft
+      protocol: TCP
+      {{- with .Values.mcRouter.service.nodePort }}
+      nodePort: {{ . }}
+      {{- end }}
+{{- end }}

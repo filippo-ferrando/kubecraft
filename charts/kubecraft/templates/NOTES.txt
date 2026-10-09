@@ -1,0 +1,8 @@
+kubecraft is installed in namespace {{ .Release.Namespace }}.
+
+UI: https://{{ .Values.manager.uiHost }}
+Servers: <slug>.{{ .Values.manager.serverBaseDomain }}:{{ .Values.mcRouter.service.port }}
+
+Point a wildcard DNS record *.{{ .Values.manager.serverBaseDomain }} at the address of the
+{{ include "kubecraft.routerName" . }} service:
+  kubectl -n {{ .Release.Namespace }} get svc {{ include "kubecraft.routerName" . }}
