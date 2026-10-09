@@ -18,6 +18,9 @@ The image and the chart use different names (`kubecraft-manager` and `kubecraft`
 | PostgreSQL 14+ and a login with an owned database | All metadata | CloudNativePG `homelab-db` |
 | DNS for the UI host and `*.<serverBaseDomain>` | UI and players | AdGuard rewrite `*.internal.fferrando.cc` |
 | Outbound HTTPS | Mojang, Modrinth, server jar downloads | yes |
+| Enough inotify instances on nodes (`fs.inotify.max_user_instances` 8192, `max_user_watches` 524288) | The kubelet needs one per followed log; RHEL defaults (128) run out | `ansible/01_os_prep.yml` |
+
+If the limit is too low, the console still works: the manager notices the kubelet error and polls the log every 2 seconds instead of following it.
 
 kubecraft never deploys a database. Without `database.host` + `database.credentialsSecret`, or `database.urlSecret`, the chart refuses to render.
 

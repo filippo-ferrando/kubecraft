@@ -14,7 +14,7 @@ Per server (label `server` is the slug): `server_info` (owner, type, version, pl
 
 Totals: `servers{state}`, `users{role,disabled}`.
 
-Manager: `http_requests_total` and `http_request_duration_seconds` by route pattern (ids never appear in labels; WebSockets are left out of latency), `logins_total{result}`, `server_actions_total{action}`, `quota_rejections_total`, `console_commands_total{result}`, `rcon_commands_total{result}`, `websocket_connections{kind}`, `reconcile_runs_total{result}`, `reconcile_duration_seconds`, `reconcile_apply_errors_total`, plus Go and process metrics.
+Manager: `http_requests_total` and `http_request_duration_seconds` by route pattern (ids never appear in labels; WebSockets are left out of latency), `logins_total{result}`, `server_actions_total{action}`, `quota_rejections_total`, `console_commands_total{result}`, `rcon_commands_total{result}`, `websocket_connections{kind}`, `reconcile_runs_total{result}`, `reconcile_duration_seconds`, `reconcile_apply_errors_total`, `playit_syncs_total{result}`, plus Go and process metrics.
 
 All names start with `kubecraft_`.
 

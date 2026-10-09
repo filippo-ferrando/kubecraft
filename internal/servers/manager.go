@@ -16,6 +16,7 @@ import (
 	"git.fferrando.cc/rdfilippo/kubecraft/internal/db"
 	"git.fferrando.cc/rdfilippo/kubecraft/internal/db/sqlc"
 	"git.fferrando.cc/rdfilippo/kubecraft/internal/k8s"
+	"git.fferrando.cc/rdfilippo/kubecraft/internal/playit"
 	"git.fferrando.cc/rdfilippo/kubecraft/internal/quota"
 )
 
@@ -39,6 +40,8 @@ type Manager struct {
 	kube  *k8s.Client
 	// content is optional; without it only the reference format is checked.
 	content ContentValidator
+	// tunnels is set when playit is configured.
+	tunnels TunnelSource
 
 	mu     sync.RWMutex
 	status map[uuid.UUID]k8s.Status
@@ -49,6 +52,28 @@ func NewManager(store *db.Store, kube *k8s.Client) *Manager {
 }
 
 func (m *Manager) Kube() *k8s.Client { return m.kube }
+
+// TunnelSource finds the playit tunnel of a server.
+type TunnelSource interface {
+	Tunnel(slug string) (playit.Tunnel, bool)
+	UsedPorts() map[int]bool
+	LastError() error
+}
+
+// SetTunnels enables playit: servers with a routable tunnel get its local port.
+func (m *Manager) SetTunnels(t TunnelSource) { m.tunnels = t }
+
+// Tunnel returns the playit tunnel of a server and whether playit is in use at all.
+func (m *Manager) Tunnel(slug string) (t playit.Tunnel, found, enabled bool) {
+	if m.tunnels == nil {
+		return playit.Tunnel{}, false, false
+	}
+	t, found = m.tunnels.Tunnel(slug)
+	return t, found, true
+}
+
+// Tunnels returns the tunnel source, nil when playit is off.
+func (m *Manager) Tunnels() TunnelSource { return m.tunnels }
 
 // SetContentValidator enables catalog checks for mods and plugins.
 func (m *Manager) SetContentValidator(v ContentValidator) { m.content = v }
@@ -122,6 +147,7 @@ func (m *Manager) Spec(s sqlc.Server, p sqlc.Plan) (k8s.ServerSpec, error) {
 		StorageGB:     p.StorageGb,
 		Running:       s.DesiredState == DesiredRunning,
 		AutoSleep:     settings.AutoSleep,
+		PlayitPort:    m.playitPort(s.Slug),
 		DisplayName:   s.DisplayName,
 		Env:           settings.Env(),
 	}, nil
@@ -500,4 +526,11 @@ func (m *Manager) Update(ctx context.Context, id uuid.UUID, req UpdateRequest, i
 func isUniqueViolation(err error) bool {
 	var pgErr *pgconn.PgError
 	return errors.As(err, &pgErr) && pgErr.Code == "23505"
+}
+
+func (m *Manager) playitPort(slug string) int {
+	if t, ok, _ := m.Tunnel(slug); ok && t.Routable {
+		return t.LocalPort
+	}
+	return 0
 }

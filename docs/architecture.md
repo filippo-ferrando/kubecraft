@@ -16,7 +16,8 @@ Minecraft ──TCP 25565──> mc-router (LoadBalancer) ──by hostname─�
                         │                                                   ├─ minecraft (itzg)      │
                         │                                                   └─ files (sidecar)       │
                         └─────────────────────────────────────────────────────────────────────────────┘
-External: PostgreSQL (for example CloudNativePG), Modrinth API, Mojang version list.
+Optional: playit gateway pod (playit agent + gate), one local port per tunnel, see components/playit.md.
+External: PostgreSQL (for example CloudNativePG), Modrinth API, Mojang version list, playit.gg API.
 ```
 
 | Part | Image | Role |

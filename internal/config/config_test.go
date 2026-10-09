@@ -84,3 +84,19 @@ func merge(m map[string]string, k, v string) map[string]string {
 	m[k] = v
 	return m
 }
+
+func TestPlayitConfig(t *testing.T) {
+	c, err := Load(env(valid()))
+	if err != nil || c.PlayitEnabled() || c.PlayitFirstPort != 30001 {
+		t.Fatalf("defaults: %+v %v", c, err)
+	}
+	m := valid()
+	m["PLAYIT_SECRET"] = " abc\n"
+	if c, _ := Load(env(m)); !c.PlayitEnabled() || c.PlayitSecret != "abc" {
+		t.Fatal("secret not trimmed or not enabled")
+	}
+	m["PLAYIT_FIRST_PORT"] = "80"
+	if _, err := Load(env(m)); err == nil {
+		t.Fatal("privileged first port accepted")
+	}
+}

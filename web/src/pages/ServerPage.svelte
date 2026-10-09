@@ -75,6 +75,10 @@
         </div>
         <div class="flex flex-wrap items-center gap-2 text-sm text-zinc-500">
           <CopyAddress address={server.address} />
+          {#if server.playit?.found}
+            <span class="rounded bg-sky-500/15 px-1.5 py-0.5 text-xs font-medium text-sky-500" title="Public address through playit.gg">playit</span>
+            <span class="text-xs">LAN/Tailscale: <span class="font-mono">{server.private_address}</span></span>
+          {/if}
           <span>{typeLabels[server.type] ?? server.type} {server.version} · {server.plan.name}</span>
           {#if server.owner_username}<span>· owner {server.owner_username}</span>{/if}
         </div>

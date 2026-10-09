@@ -1,0 +1,17 @@
+{"status":"success","data":{"tunnels":[
+{"id":"bac1a056-30d8-4555-8efb-dd147de5c444","created_at":"2026-10-09T16:11:14.617778Z","name":"kubecraft-survival","user_enabled":true,"disabled_by_admin":false,"offline_reasons":null,"tunnel_type":"minecraft-java","port_type":"tcp","port_count":1,"firewall_id":null,
+ "props":{"hostname_verify_level":"NoRawIp","app_protect_level":0,"http_firewall_ignore_acme":false},
+ "origin":{"type":"agent","details":{"agent_id":"76e51581-9f55-42ca-b1c0-ddbcd52982a5","name":"kubecraft","config_schema_id":"0d6d4f84-8c24-42a7-917a-c3e53d90cd9e","config_data":{"fields":[{"name":"local_ip","value":"127.0.0.1"},{"name":"local_port","value":"25565"}]},"config_invalid":null}},
+ "port_allocation_requests":[],
+ "public_allocations":[{"type":"PortAllocation","details":{"alloc_id":"c30d60fd-c979-4dcc-a492-c8e4b8391643","ip_region":"global","ip_hostname":"214.ip.gl.ply.gg","auto_domain":"fried-dome.tun.ply.gg","ip":"147.185.221.214","port":33090,"port_count":1,"port_type":"tcp","expire_notice":null,"replaces_alloc_id":null,"scheduled_removal_at":null}},{"type":"Gateway","details":{"id":null,"hostname":"fried-dome.tun.ply.gg","region":"global"}}],
+ "connect_addresses":[
+  {"type":"auto","value":{"address":"fried-dome.tun.ply.gg","source":{"resource":"port-allocation","id":"c30d60fd-c979-4dcc-a492-c8e4b8391643"}}},
+  {"type":"auto","value":{"address":"214.ip.gl.ply.gg:33090","source":{"resource":"port-allocation","id":"c30d60fd-c979-4dcc-a492-c8e4b8391643"}}},
+  {"type":"addr4","value":{"address":"147.185.221.214:33090","source":{"resource":"port-allocation","id":"c30d60fd-c979-4dcc-a492-c8e4b8391643"}}},
+  {"type":"addr6","value":{"address":"[2602:fbaf:800::d6]:33090","source":{"resource":"port-allocation","id":"c30d60fd-c979-4dcc-a492-c8e4b8391643"}}}],
+ "region_change":null},
+{"id":"t2","name":"kubecraft-creative","user_enabled":false,"offline_reasons":["AgentOverLimit"],"tunnel_type":"minecraft-java",
+ "origin":{"type":"agent","details":{"config_data":{"fields":[{"name":"local_ip","value":"192.168.1.5"},{"name":"local_port","value":"30002"}]}}},
+ "connect_addresses":[{"type":"addr4","value":{"address":"147.185.221.9:40000"}}]},
+{"id":"t3","name":"my-other-game","tunnel_type":"minecraft-java","origin":{"type":"agent","details":{"config_data":{"fields":[]}}},"connect_addresses":[]}
+]}}

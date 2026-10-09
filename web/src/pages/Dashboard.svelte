@@ -70,6 +70,11 @@
             <StatusBadge status={s.status} />
           </div>
           <CopyAddress address={s.address} />
+          {#if s.playit && !s.playit.found}
+            <p class="text-xs text-amber-500">No playit tunnel yet, see the server page.</p>
+          {:else if s.playit && !s.playit.online}
+            <p class="text-xs text-red-500">playit tunnel has a problem, see the server page.</p>
+          {/if}
           <ServerStats server={s} />
           <p class="text-xs text-zinc-500">{planSummary(s.plan)}</p>
           <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->

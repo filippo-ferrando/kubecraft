@@ -78,15 +78,45 @@ kind: Secret
 metadata: {name: kubecraft-db}
 stringData: {username: kubecraft, password: "pw/with+special=chars"}
 EOF
+# Fake playit API with one tunnel, kubecraft-e2e on local port 30005 (shape copied
+# from a real response). The real agent container just fails to log in here.
+kubectl -n minecraft create secret generic playit --from-literal=SECRET_KEY=e2e >/dev/null
+kubectl -n minecraft create configmap fake-playit --from-file=server.py="$ROOT/hack/fake_playit.py" >/dev/null
+kubectl -n minecraft apply -f - >/dev/null <<'YAML'
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: fake-playit}
+spec:
+  selector: {matchLabels: {app: fake-playit}}
+  template:
+    metadata: {labels: {app: fake-playit}}
+    spec:
+      containers:
+        - name: api
+          image: python:3.13-alpine
+          command: ["python3", "/app/server.py"]
+          resources: {limits: {cpu: 100m, memory: 64Mi}}
+          volumeMounts: [{name: app, mountPath: /app}]
+      volumes: [{name: app, configMap: {name: fake-playit}}]
+---
+apiVersion: v1
+kind: Service
+metadata: {name: fake-playit}
+spec:
+  selector: {app: fake-playit}
+  ports: [{port: 80, targetPort: 8080}]
+YAML
 docker run --rm --network host -v "$ROOT/charts:/apps" -v "$KUBECONFIG:/kubeconfig:ro" -e KUBECONFIG=/kubeconfig -w /apps \
-  alpine/helm:latest install kc kubecraft -n minecraft --wait --timeout 5m \
+  alpine/helm:latest install kc kubecraft -n minecraft --timeout 5m \
   --set image.repository=kubecraft --set image.tag=e2e --set image.pullPolicy=Never \
   --set manager.uiHost=localhost:$UI_PORT --set manager.cookieSecure=false --set manager.serverBaseDomain=mine.test \
   --set secrets.sessionSecret=e2e-session-secret-e2e-session-secret \
   --set secrets.bootstrapAdminUser=admin --set secrets.bootstrapAdminPassword=admin-password \
   --set mcRouter.autoScale.downAfter=1m \
+  --set playit.enabled=true --set playit.existingSecret=playit --set playit.apiURL=http://fake-playit.minecraft.svc \
   --set database.host=pg.minecraft.svc --set database.sslmode=disable --set database.credentialsSecret.name=kubecraft-db >/dev/null
 
+kubectl -n minecraft rollout status deploy/kc-kubecraft --timeout=5m >/dev/null
 kubectl -n minecraft port-forward svc/kc-kubecraft "$UI_PORT:80" >/dev/null 2>&1 &
 PF_PID=$!
 for _ in $(seq 30); do curl -sf "$BASE/healthz" >/dev/null && break; sleep 1; done
@@ -152,6 +182,24 @@ backup_has_world() {
 }
 step "downloading a world backup (running)"
 backup_has_world
+
+step "playit: the tunnel address is the server address, its port reaches only this server"
+addr() { api GET "/servers/$ID" | json 'd["address"]'; }
+for _ in $(seq 20); do [ "$(addr)" = "e2e-tunnel.tun.ply.gg" ] && break; sleep 3; done
+[ "$(addr)" = "e2e-tunnel.tun.ply.gg" ] || fail "playit address not used"
+for _ in $(seq 20); do
+  [ "$(kubectl -n minecraft get svc mc-e2e -o jsonpath='{.metadata.annotations.mc-manager/playit-port}')" = 30005 ] && break
+  sleep 3
+done
+GW=$(kubectl -n minecraft get pod -l app.kubernetes.io/name=playit-gateway -o name | head -1)
+kubectl -n minecraft port-forward "$GW" 19555:30005 >/dev/null 2>&1 &
+GPF=$!
+sleep 4
+# Any hostname works on the tunnel port, even a forged one: the port decides the server.
+out=$(docker run --rm --network host --add-host "anything.example:127.0.0.1" itzg/mc-monitor status --host anything.example --port 19555 --timeout 10s 2>&1)
+kill $GPF 2>/dev/null || true
+echo "$out"
+echo "$out" | grep -q "motd='kubecraft e2e'" || fail "gateway did not reach the server"
 
 step "stop keeps the world, start brings it back"
 api POST "/servers/$ID/stop" >/dev/null

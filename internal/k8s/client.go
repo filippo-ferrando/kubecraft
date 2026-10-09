@@ -156,7 +156,9 @@ func (c *Client) ensureService(ctx context.Context, s ServerSpec) error {
 	if !owned(cur.Labels, s.ID) {
 		return ErrConflict
 	}
-	same := len(cur.Spec.Ports) == len(want.Spec.Ports) && cur.Spec.Selector[LabelServerID] == s.ID.String()
+	same := len(cur.Spec.Ports) == len(want.Spec.Ports) && cur.Spec.Selector[LabelServerID] == s.ID.String() &&
+		cur.Labels[LabelPlayit] == want.Labels[LabelPlayit] &&
+		cur.Annotations[AnnotationPlayitPort] == want.Annotations[AnnotationPlayitPort]
 	for k, v := range want.Annotations {
 		same = same && cur.Annotations[k] == v
 	}
@@ -166,6 +168,8 @@ func (c *Client) ensureService(ctx context.Context, s ServerSpec) error {
 	if cur.Annotations == nil {
 		cur.Annotations = map[string]string{}
 	}
+	// The tunnel may have gone away: drop the old port before copying.
+	delete(cur.Annotations, AnnotationPlayitPort)
 	for k, v := range want.Annotations {
 		cur.Annotations[k] = v
 	}

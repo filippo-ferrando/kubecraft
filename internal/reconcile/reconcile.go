@@ -4,6 +4,7 @@ package reconcile
 import (
 	"context"
 	"log/slog"
+	"strconv"
 	"time"
 
 	"github.com/google/uuid"
@@ -139,6 +140,13 @@ func (r *Reconciler) drifted(s sqlc.Server, plan sqlc.Plan, obs *k8s.Observed, s
 	}
 	spec, err := r.mgr.Spec(s, plan)
 	if err != nil {
+		return true
+	}
+	wantPort := ""
+	if spec.PlayitPort > 0 {
+		wantPort = strconv.Itoa(spec.PlayitPort)
+	}
+	if snap.PlayitPorts[s.ID] != wantPort {
 		return true
 	}
 	want := k8s.BuildStatefulSet(r.kube.Options(), spec)

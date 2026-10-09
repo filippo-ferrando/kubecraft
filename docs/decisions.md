@@ -73,4 +73,6 @@ Each entry lists the choice, what else was considered, and why.
 
 **Backups are downloads, not a schedule.** A tar.gz is built on demand by the sidecar. On a running server, autosave is paused and the world flushed first so the archive is consistent. Scheduled backups to external storage are left for later.
 
+**playit.gg for public access, routed by port.** The homelab is behind CGNAT and Cloudflare Tunnels only carry HTTP, so a free TCP relay (playit.gg) publishes servers. The agent key cannot create tunnels (read only), so tunnels are made in the playit dashboard with the name `kubecraft-<slug>` and kubecraft discovers them. Each tunnel has its own local port on a small gateway next to the agent; the gateway sends a port only to its server through mc-router. Routing by port keeps forged hostnames from reaching other servers and keeps auto sleep working. Without playit, the single `serverBaseDomain` name is used for everything, so a future VPS only needs DNS and an ingress route.
+
 **Server type fixed after creation.** Moving a world between loaders (for example Fabric to Paper) often breaks it, so the type is chosen once.

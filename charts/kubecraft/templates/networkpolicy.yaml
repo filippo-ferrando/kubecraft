@@ -74,4 +74,20 @@ spec:
       ports:
         - port: 25575
         - port: 8081
+{{- if .Values.playit.enabled }}
+---
+# playit gateway: no inbound traffic at all; the agent dials out and reaches the
+# gate over localhost, the gate dials mc-router.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "kubecraft.fullname" . }}-playit-gateway
+  labels:
+    {{- include "kubecraft.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "kubecraft.gatewaySelector" . | nindent 6 }}
+  policyTypes: [Ingress]
+{{- end }}
 {{- end }}

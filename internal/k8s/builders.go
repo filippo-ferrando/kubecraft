@@ -50,6 +50,10 @@ const (
 	annoAsleepMOTD = "mc-router.itzg.me/autoScaleAsleepMOTD"
 	annoLoadMOTD   = "mc-router.itzg.me/autoScaleLoadingMOTD"
 
+	// Read by the playit gateway (internal/gate): the local port of the server's tunnel.
+	LabelPlayit          = "mc-manager/playit"
+	AnnotationPlayitPort = "mc-manager/playit-port"
+
 	// LabelHelperFor marks the temporary file pod of a stopped server.
 	LabelHelperFor = "mc-manager/helper-for"
 )
@@ -82,6 +86,8 @@ type ServerSpec struct {
 	// AutoSleep lets mc-router scale the server to 0 when idle and back on join.
 	AutoSleep   bool
 	DisplayName string
+	// PlayitPort is the local port of the server's playit tunnel, 0 when it has none.
+	PlayitPort int
 	// Env holds the validated user settings as itzg env vars.
 	Env map[string]string
 }
@@ -165,6 +171,10 @@ func serviceAnnotations(o Options, s ServerSpec) map[string]string {
 func BuildService(o Options, s ServerSpec) *corev1.Service {
 	m := o.meta(ServiceName(s.Slug), s)
 	m.Annotations = serviceAnnotations(o, s)
+	m.Labels[LabelPlayit] = strconv.FormatBool(s.PlayitPort > 0)
+	if s.PlayitPort > 0 {
+		m.Annotations[AnnotationPlayitPort] = strconv.Itoa(s.PlayitPort)
+	}
 	return &corev1.Service{
 		ObjectMeta: m,
 		Spec: corev1.ServiceSpec{

@@ -17,26 +17,30 @@ import (
 	"git.fferrando.cc/rdfilippo/kubecraft/internal/k8s"
 	"git.fferrando.cc/rdfilippo/kubecraft/internal/live"
 	"git.fferrando.cc/rdfilippo/kubecraft/internal/metrics"
+	"git.fferrando.cc/rdfilippo/kubecraft/internal/playit"
 	"git.fferrando.cc/rdfilippo/kubecraft/internal/quota"
 	"git.fferrando.cc/rdfilippo/kubecraft/internal/servers"
 )
 
 type serverJSON struct {
-	ID            uuid.UUID        `json:"id"`
-	OwnerID       uuid.UUID        `json:"owner_id"`
-	OwnerUsername string           `json:"owner_username,omitempty"`
-	Slug          string           `json:"slug"`
-	DisplayName   string           `json:"display_name"`
-	Address       string           `json:"address"`
-	Plan          planJSON         `json:"plan"`
-	Type          string           `json:"type"`
-	Version       string           `json:"version"`
-	Settings      servers.Settings `json:"settings"`
-	DesiredState  string           `json:"desired_state"`
-	Status        k8s.Status       `json:"status"`
-	Live          *live.Stats      `json:"live,omitempty"`
-	CreatedAt     time.Time        `json:"created_at"`
-	UpdatedAt     time.Time        `json:"updated_at"`
+	ID            uuid.UUID `json:"id"`
+	OwnerID       uuid.UUID `json:"owner_id"`
+	OwnerUsername string    `json:"owner_username,omitempty"`
+	Slug          string    `json:"slug"`
+	DisplayName   string    `json:"display_name"`
+	// Address is what players use: the playit address when the server has a tunnel.
+	Address        string           `json:"address"`
+	PrivateAddress string           `json:"private_address"`
+	Playit         *playitJSON      `json:"playit,omitempty"`
+	Plan           planJSON         `json:"plan"`
+	Type           string           `json:"type"`
+	Version        string           `json:"version"`
+	Settings       servers.Settings `json:"settings"`
+	DesiredState   string           `json:"desired_state"`
+	Status         k8s.Status       `json:"status"`
+	Live           *live.Stats      `json:"live,omitempty"`
+	CreatedAt      time.Time        `json:"created_at"`
+	UpdatedAt      time.Time        `json:"updated_at"`
 }
 
 func (s *Server) toServerJSON(srv sqlc.Server, plan sqlc.Plan) serverJSON {
@@ -50,22 +54,54 @@ func (s *Server) toServerJSON(srv sqlc.Server, plan sqlc.Plan) serverJSON {
 			stats = &st
 		}
 	}
-	return serverJSON{
-		Live:         stats,
-		ID:           srv.ID,
-		OwnerID:      srv.OwnerID,
-		Slug:         srv.Slug,
-		DisplayName:  srv.DisplayName,
-		Address:      s.mgr.Kube().Options().Host(srv.Slug),
-		Plan:         toPlanJSON(plan),
-		Type:         srv.Type,
-		Version:      srv.Version,
-		Settings:     settings,
-		DesiredState: srv.DesiredState,
-		Status:       s.mgr.Status(srv),
-		CreatedAt:    srv.CreatedAt,
-		UpdatedAt:    srv.UpdatedAt,
+	return s.withPlayit(serverJSON{
+		Live:           stats,
+		ID:             srv.ID,
+		OwnerID:        srv.OwnerID,
+		Slug:           srv.Slug,
+		DisplayName:    srv.DisplayName,
+		Address:        s.mgr.Kube().Options().Host(srv.Slug),
+		PrivateAddress: s.mgr.Kube().Options().Host(srv.Slug),
+		Plan:           toPlanJSON(plan),
+		Type:           srv.Type,
+		Version:        srv.Version,
+		Settings:       settings,
+		DesiredState:   srv.DesiredState,
+		Status:         s.mgr.Status(srv),
+		CreatedAt:      srv.CreatedAt,
+		UpdatedAt:      srv.UpdatedAt,
+	})
+}
+
+// playitJSON tells the UI about the server's tunnel, or how to create it.
+type playitJSON struct {
+	TunnelName    string   `json:"tunnel_name"`
+	Found         bool     `json:"found"`
+	Online        bool     `json:"online"`
+	Address       string   `json:"address,omitempty"`
+	LocalIP       string   `json:"local_ip"`
+	LocalPort     int      `json:"local_port,omitempty"`
+	SuggestedPort int      `json:"suggested_port,omitempty"`
+	Problems      []string `json:"problems,omitempty"`
+}
+
+// withPlayit fills the playit block and, when a tunnel exists, uses its address.
+func (s *Server) withPlayit(j serverJSON) serverJSON {
+	t, found, enabled := s.mgr.Tunnel(j.Slug)
+	if !enabled {
+		return j
 	}
+	p := &playitJSON{TunnelName: playit.Prefix + j.Slug, Found: found, LocalIP: playit.LocalIP}
+	if found {
+		p.Online, p.Address, p.LocalPort, p.Problems = t.Online, t.Address, t.LocalPort, t.Problems
+		if t.Address != "" {
+			j.Address = t.Address
+		}
+	} else {
+		p.SuggestedPort = playit.SuggestPort(s.mgr.Tunnels().UsedPorts(), s.cfg.PlayitFirstPort)
+	}
+	j.Playit = p
+	return j
 }
 
 // writeServers renders a list with plans resolved in one query.
@@ -326,7 +362,7 @@ func (s *Server) myQuota(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"limits": limits, "usage": usage})
 }
 
-func (s *Server) meta(w http.ResponseWriter, _ *http.Request) {
+func (s *Server) meta(w http.ResponseWriter, r *http.Request) {
 	levels := make([]string, 0, len(servers.LevelTypes))
 	for _, l := range []string{"normal", "flat", "large_biomes", "amplified"} {
 		if _, ok := servers.LevelTypes[l]; ok {
@@ -344,6 +380,7 @@ func (s *Server) meta(w http.ResponseWriter, _ *http.Request) {
 		"auto_sleep":         s.cfg.AutoSleep,
 		"auto_sleep_idle":    s.cfg.AutoSleepIdle,
 		"files":              s.cfg.FilesImage != "",
+		"playit":             s.playitMeta(r),
 	})
 }
 
@@ -358,4 +395,17 @@ func (s *Server) listVersions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, l)
+}
+
+// playitMeta says whether playit is on and, for admins, whether listing tunnels works.
+func (s *Server) playitMeta(r *http.Request) map[string]any {
+	src := s.mgr.Tunnels()
+	if src == nil {
+		return map[string]any{"enabled": false}
+	}
+	m := map[string]any{"enabled": true, "first_port": s.cfg.PlayitFirstPort}
+	if err := src.LastError(); err != nil && mustIdentity(r).IsAdmin() {
+		m["error"] = err.Error()
+	}
+	return m
 }

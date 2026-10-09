@@ -1,0 +1,113 @@
+{{- if .Values.playit.enabled }}
+{{- $name := printf "%s-playit-gateway" (include "kubecraft.fullname" .) | trunc 63 | trimSuffix "-" -}}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "kubecraft.labels" . | nindent 4 }}
+---
+# Reads which port belongs to which server (Service labels); nothing else.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "kubecraft.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "kubecraft.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ $name }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ $name }}
+    namespace: {{ .Release.Namespace }}
+---
+# The playit agent sends each tunnel to 127.0.0.1:<local port>; the gate listens on
+# those ports and hands each one to mc-router as its own server only.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "kubecraft.baseLabels" . | nindent 4 }}
+    {{- include "kubecraft.gatewaySelector" . | nindent 4 }}
+spec:
+  replicas: 1
+  # Two agents with one key would fight over the tunnels.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "kubecraft.gatewaySelector" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "kubecraft.baseLabels" . | nindent 8 }}
+        {{- include "kubecraft.gatewaySelector" . | nindent 8 }}
+    spec:
+      serviceAccountName: {{ $name }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: gate
+          image: {{ include "kubecraft.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args: ["gate"]
+          env:
+            - name: K8S_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: GATE_BIND
+              value: "127.0.0.1"
+            - name: GATE_UPSTREAM
+              value: "{{ include "kubecraft.routerName" . }}.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.mcRouter.service.port }}"
+            - name: GATE_MAX_CONNS
+              value: {{ .Values.playit.gateway.maxConnections | quote }}
+          securityContext:
+            {{- include "kubecraft.containerSecurity" . | nindent 12 }}
+          resources:
+            {{- toYaml .Values.playit.gateway.resources | nindent 12 }}
+        - name: playit
+          image: {{ .Values.playit.image }}
+          # The default socket path is not writable on a read-only root filesystem.
+          args: ["--socket-path", "/tmp/playitd.sock"]
+          env:
+            - name: SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ required "playit.existingSecret is required with playit.enabled" .Values.playit.existingSecret }}
+                  key: {{ .Values.playit.secretKey }}
+          securityContext:
+            {{- include "kubecraft.containerSecurity" . | nindent 12 }}
+            runAsUser: 1000
+            runAsGroup: 1000
+          resources:
+            {{- toYaml .Values.playit.resources | nindent 12 }}
+          volumeMounts:
+            - name: playit-tmp
+              mountPath: /tmp
+      volumes:
+        - name: playit-tmp
+          emptyDir: {}
+{{- end }}

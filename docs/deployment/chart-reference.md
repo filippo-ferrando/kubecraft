@@ -68,6 +68,19 @@ Chart: `charts/kubecraft`, published as `oci://git.internal.fferrando.cc/rdfilip
 | `mcRouter.metrics` | `false` | Prometheus metrics of mc-router |
 | `mcRouter.extraArgs`, `resources`, `nodeSelector`, `tolerations`, `affinity` | | |
 
+### playit.gg
+
+| Value | Default | Notes |
+|---|---|---|
+| `playit.enabled` | `false` | Deploys the playit gateway and makes servers use their tunnel address |
+| `playit.existingSecret`, `secretKey` | `""`, `SECRET_KEY` | Secret with the playit agent key |
+| `playit.image` | `ghcr.io/playit-cloud/playit-agent:1.0.8` | |
+| `playit.firstPort` | `30001` | First local port suggested for new tunnels |
+| `playit.resources`, `playit.gateway.resources`, `playit.gateway.maxConnections` | small, `512` | |
+| `playit.apiURL` | `""` | Only for tests |
+
+See [playit.gg](../components/playit.md).
+
 ### Features and backstops
 
 | Value | Default | Notes |
@@ -92,6 +105,7 @@ Chart: `charts/kubecraft`, published as `oci://git.internal.fferrando.cc/rdfilip
 | `ingress.yaml` | Ingress, IngressRoute and Certificate, each optional |
 | `mc-router.yaml` | mc-router ServiceAccount, Role (services; statefulsets patch with auto scale), Deployment, Service |
 | `metrics.yaml` | Metrics Services and optional ServiceMonitor |
+| `playit-gateway.yaml` | With `playit.enabled`: ServiceAccount and Role (read Services), gateway Deployment with the gate and the playit agent |
 | `networkpolicy.yaml` | Manager: ingress namespace on 8080, scraper on 9090. mc-router: 25565 from anywhere. Game servers: 25565 from mc-router and manager, 25575 and 8081 from the manager |
 | `quota.yaml` | ResourceQuota and LimitRange |
 

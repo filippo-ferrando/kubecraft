@@ -60,6 +60,17 @@ export interface Status {
   node?: string;
 }
 
+export interface PlayitStatus {
+  tunnel_name: string;
+  found: boolean;
+  online: boolean;
+  address?: string;
+  local_ip: string;
+  local_port?: number;
+  suggested_port?: number;
+  problems?: string[];
+}
+
 export interface LiveStats {
   players?: { online: number; max: number; names: string[] };
   cpu_m?: number;
@@ -74,6 +85,8 @@ export interface Server {
   slug: string;
   display_name: string;
   address: string;
+  private_address: string;
+  playit?: PlayitStatus;
   plan: Plan;
   type: string;
   version: string;
@@ -115,6 +128,7 @@ export interface Meta {
   auto_sleep: boolean;
   auto_sleep_idle: string;
   files: boolean;
+  playit: { enabled: boolean; first_port?: number; error?: string };
 }
 
 export interface FileEntry {

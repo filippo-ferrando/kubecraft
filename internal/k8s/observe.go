@@ -37,6 +37,8 @@ type Snapshot struct {
 	Services map[uuid.UUID]string
 	Secrets  map[uuid.UUID]string
 	PVCs     map[uuid.UUID]string
+	// PlayitPorts is the playit port annotation of each server Service ("" when none).
+	PlayitPorts map[uuid.UUID]string
 	// Helpers are temporary file pods by server id.
 	Helpers map[uuid.UUID]*corev1.Pod
 }
@@ -53,6 +55,8 @@ func (c *Client) Snapshot(ctx context.Context) (*Snapshot, error) {
 		Secrets:  map[uuid.UUID]string{},
 		PVCs:     map[uuid.UUID]string{},
 		Helpers:  map[uuid.UUID]*corev1.Pod{},
+
+		PlayitPorts: map[uuid.UUID]string{},
 	}
 	get := func(id uuid.UUID) *Observed {
 		o, ok := snap.Servers[id]
@@ -92,6 +96,7 @@ func (c *Client) Snapshot(ctx context.Context) (*Snapshot, error) {
 	for _, s := range svcs.Items {
 		if id, ok := serverID(s.Labels); ok {
 			snap.Services[id] = s.Labels[LabelSlug]
+			snap.PlayitPorts[id] = s.Annotations[AnnotationPlayitPort]
 		}
 	}
 	secrets, err := c.cs.CoreV1().Secrets(ns).List(ctx, opts)

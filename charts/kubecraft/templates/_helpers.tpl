@@ -27,6 +27,11 @@ app.kubernetes.io/name: mc-router
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end -}}
 
+{{- define "kubecraft.gatewaySelector" -}}
+app.kubernetes.io/name: playit-gateway
+app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end -}}
+
 {{- define "kubecraft.routerName" -}}
 {{- printf "%s-mc-router" (include "kubecraft.fullname" .) | trunc 63 | trimSuffix "-" -}}
 {{- end -}}

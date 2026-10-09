@@ -3,6 +3,7 @@ package api
 import (
 	"bufio"
 	"context"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -156,10 +157,12 @@ func (s *Server) readCommands(ctx context.Context, conn *websocket.Conn, r *http
 }
 
 // followLogs streams the pod log and re-attaches after restarts. Lines already
-// sent are skipped using their timestamps.
+// sent are skipped using their timestamps. When the node cannot follow logs (no
+// inotify instances left), it polls the log every few seconds instead.
 func (s *Server) followLogs(ctx context.Context, slug string, send func(termMsg) bool) {
 	kube := s.mgr.Kube()
 	var lastTS time.Time
+	polling := false
 	lastStatus := ""
 	status := func(text string) bool {
 		if text == lastStatus {
@@ -199,7 +202,7 @@ func (s *Server) followLogs(ctx context.Context, slug string, send func(termMsg)
 			t := metav1.NewTime(lastTS)
 			since = &t
 		}
-		stream, err := kube.LogStream(ctx, slug, tail, since)
+		stream, err := kube.LogStream(ctx, slug, !polling, tail, since)
 		if err != nil {
 			slog.Debug("log stream failed", "server", slug, "err", err)
 			if !wait(3 * time.Second) {
@@ -211,30 +214,62 @@ func (s *Server) followLogs(ctx context.Context, slug string, send func(termMsg)
 			_ = stream.Close()
 			return
 		}
-		sc := bufio.NewScanner(stream)
-		sc.Buffer(make([]byte, 0, 4096), maxLogLine)
-		for sc.Scan() {
-			ts, line := splitTimestamp(sc.Text())
-			if !ts.IsZero() {
-				if !ts.After(lastTS) {
-					continue
-				}
-				lastTS = ts
-			}
-			if !send(termMsg{Type: "log", Line: line}) {
-				_ = stream.Close()
+		res := readLogs(stream, &lastTS, send)
+		_ = stream.Close()
+		if res == logsClientGone || ctx.Err() != nil {
+			return
+		}
+		if res == logsCannotFollow && !polling {
+			slog.Warn("node cannot follow logs, polling instead (raise fs.inotify.max_user_instances)", "server", slug)
+			polling = true
+		}
+		if polling {
+			// Quiet loop: the next read only returns lines newer than lastTS.
+			if !wait(logPollInterval) {
 				return
 			}
-		}
-		_ = stream.Close()
-		if ctx.Err() != nil {
-			return
+			continue
 		}
 		lastStatus = ""
 		if !status("log stream ended, reconnecting") || !wait(2*time.Second) {
 			return
 		}
 	}
+}
+
+const logPollInterval = 2 * time.Second
+
+type logsResult int
+
+const (
+	logsEnded logsResult = iota
+	logsClientGone
+	logsCannotFollow
+)
+
+// The kubelet writes this line into the stream when it has no inotify instance left.
+const followFailedPrefix = "failed to create fsnotify watcher"
+
+// readLogs sends new lines from r, skipping lines at or before lastTS.
+func readLogs(r io.Reader, lastTS *time.Time, send func(termMsg) bool) logsResult {
+	sc := bufio.NewScanner(r)
+	sc.Buffer(make([]byte, 0, 4096), maxLogLine)
+	for sc.Scan() {
+		ts, line := splitTimestamp(sc.Text())
+		if ts.IsZero() && strings.HasPrefix(line, followFailedPrefix) {
+			return logsCannotFollow
+		}
+		if !ts.IsZero() {
+			if !ts.After(*lastTS) {
+				continue
+			}
+			*lastTS = ts
+		}
+		if !send(termMsg{Type: "log", Line: line}) {
+			return logsClientGone
+		}
+	}
+	return logsEnded
 }
 
 // splitTimestamp splits "2024-01-01T00:00:00.123456789Z line" into time and line.

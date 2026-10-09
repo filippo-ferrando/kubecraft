@@ -2,6 +2,7 @@
   import type { Server } from "../../lib/types";
   import { cpu, mem, planSummary, stateStyle, uptime } from "../../lib/format";
   import ServerStats from "../../components/ServerStats.svelte";
+  import PlayitInfo from "../../components/PlayitInfo.svelte";
 
   let { server }: { server: Server; onchange: (s: Server) => void } = $props();
   const s = $derived(server.status);
@@ -42,4 +43,5 @@
       {mem(server.plan.memory_limit_mb)}.
     </p>
   </div>
+  <PlayitInfo {server} />
 </div>

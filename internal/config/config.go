@@ -18,6 +18,10 @@ type Config struct {
 	// AutoSleep is true when mc-router auto scales servers; AutoSleepIdle is its idle time.
 	AutoSleep     bool
 	AutoSleepIdle string
+	// playit.gg: the agent key (read only) used to find the tunnel of each server.
+	PlayitSecret    string
+	PlayitAPI       string
+	PlayitFirstPort int
 	// MetricsAddr serves /metrics on its own port; empty disables it.
 	MetricsAddr      string
 	DatabaseURL      string
@@ -66,6 +70,8 @@ func Load(lookup func(string) (string, bool)) (*Config, error) {
 		Kubeconfig:       get("KUBECONFIG", ""),
 		FilesImage:       get("FILES_IMAGE", ""),
 		AutoSleepIdle:    get("AUTO_SLEEP_IDLE", "15m"),
+		PlayitSecret:     strings.TrimSpace(get("PLAYIT_SECRET", "")),
+		PlayitAPI:        get("PLAYIT_API", "https://api.playit.gg"),
 	}
 
 	// An empty URL makes pgx read the standard PG* variables instead.
@@ -128,6 +134,11 @@ func Load(lookup func(string) (string, bool)) (*Config, error) {
 		}
 	}
 
+	c.PlayitFirstPort, err = strconv.Atoi(get("PLAYIT_FIRST_PORT", "30001"))
+	if err != nil || c.PlayitFirstPort < 1024 || c.PlayitFirstPort > 65535 {
+		errs = append(errs, errors.New("PLAYIT_FIRST_PORT must be between 1024 and 65535"))
+	}
+
 	if (c.BootstrapUser == "") != (c.BootstrapPass == "") {
 		errs = append(errs, errors.New("BOOTSTRAP_ADMIN_USER and BOOTSTRAP_ADMIN_PASSWORD must be set together"))
 	}
@@ -142,6 +153,9 @@ func Load(lookup func(string) (string, bool)) (*Config, error) {
 func FromEnv() (*Config, error) {
 	return Load(os.LookupEnv)
 }
+
+// PlayitEnabled reports whether servers are published through playit.gg tunnels.
+func (c *Config) PlayitEnabled() bool { return c.PlayitSecret != "" }
 
 // Origins returns every origin allowed to send state-changing requests.
 func (c *Config) Origins() []string {

@@ -19,10 +19,12 @@ import (
 	"git.fferrando.cc/rdfilippo/kubecraft/internal/db"
 	"git.fferrando.cc/rdfilippo/kubecraft/internal/db/sqlc"
 	"git.fferrando.cc/rdfilippo/kubecraft/internal/files"
+	"git.fferrando.cc/rdfilippo/kubecraft/internal/gate"
 	"git.fferrando.cc/rdfilippo/kubecraft/internal/k8s"
 	"git.fferrando.cc/rdfilippo/kubecraft/internal/live"
 	"git.fferrando.cc/rdfilippo/kubecraft/internal/metrics"
 	"git.fferrando.cc/rdfilippo/kubecraft/internal/modrinth"
+	"git.fferrando.cc/rdfilippo/kubecraft/internal/playit"
 	"git.fferrando.cc/rdfilippo/kubecraft/internal/reconcile"
 	"git.fferrando.cc/rdfilippo/kubecraft/internal/servers"
 	"git.fferrando.cc/rdfilippo/kubecraft/internal/versions"
@@ -35,6 +37,15 @@ import (
 var version = "dev"
 
 func main() {
+	// Gateway between the playit agent and mc-router, one port per tunnel.
+	if len(os.Args) > 1 && os.Args[1] == "gate" {
+		slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
+		if err := runGate(); err != nil {
+			slog.Error("fatal", "err", err)
+			os.Exit(1)
+		}
+		return
+	}
 	// The same image runs the file sidecar next to each server.
 	if len(os.Args) > 1 && os.Args[1] == "files" {
 		slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
@@ -98,6 +109,13 @@ func run() error {
 	mgr := servers.NewManager(store, kube)
 	catalog := modrinth.New(modrinth.DefaultBaseURL, "kubecraft/"+version+" (git.fferrando.cc/rdfilippo/kubecraft)")
 	mgr.SetContentValidator(catalog)
+
+	// playit.gg: find each server's tunnel; the gateway pod serves its local port.
+	if cfg.PlayitEnabled() {
+		tunnels := playit.NewWatcher(playit.NewClient(cfg.PlayitAPI, cfg.PlayitSecret), nil)
+		go tunnels.Run(ctx, 30*time.Second)
+		mgr.SetTunnels(tunnels)
+	}
 	go reconcile.New(store, mgr).Run(ctx, 5*time.Second)
 
 	pool := live.NewPool(kube.RCONAddr, kube.RCONPassword)
@@ -252,4 +270,30 @@ func envOr(k, def string) string {
 		return v
 	}
 	return def
+}
+
+// runGate opens one local port per playit tunnel and forwards it to its server.
+func runGate() error {
+	upstream, ns := os.Getenv("GATE_UPSTREAM"), os.Getenv("K8S_NAMESPACE")
+	if upstream == "" || ns == "" {
+		return fmt.Errorf("GATE_UPSTREAM and K8S_NAMESPACE are required")
+	}
+	maxConns, err := strconv.Atoi(envOr("GATE_MAX_CONNS", "512"))
+	if err != nil || maxConns < 1 {
+		return fmt.Errorf("GATE_MAX_CONNS must be a positive number")
+	}
+	restCfg, err := k8s.RestConfig(envOr("IN_CLUSTER", "true") == "true", os.Getenv("KUBECONFIG"))
+	if err != nil {
+		return err
+	}
+	cs, err := kubernetes.NewForConfig(restCfg)
+	if err != nil {
+		return err
+	}
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+	g := gate.New(envOr("GATE_BIND", "127.0.0.1"), upstream, maxConns)
+	slog.Info("playit gateway started", "upstream", upstream)
+	g.Run(ctx, cs, ns, 5*time.Second)
+	return nil
 }

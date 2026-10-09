@@ -87,6 +87,19 @@ spec:
               value: {{ and .Values.mcRouter.enabled .Values.mcRouter.autoScale.enabled | quote }}
             - name: AUTO_SLEEP_IDLE
               value: {{ .Values.mcRouter.autoScale.downAfter | quote }}
+            {{- if .Values.playit.enabled }}
+            - name: PLAYIT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ required "playit.existingSecret is required with playit.enabled" .Values.playit.existingSecret }}
+                  key: {{ .Values.playit.secretKey }}
+            - name: PLAYIT_FIRST_PORT
+              value: {{ .Values.playit.firstPort | quote }}
+            {{- with .Values.playit.apiURL }}
+            - name: PLAYIT_API
+              value: {{ . | quote }}
+            {{- end }}
+            {{- end }}
             - name: METRICS_ADDR
               value: {{ if .Values.metrics.enabled }}{{ printf ":%v" .Values.metrics.port | quote }}{{ else }}""{{ end }}
             - name: LOG_LEVEL

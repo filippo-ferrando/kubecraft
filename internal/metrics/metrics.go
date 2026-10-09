@@ -57,6 +57,10 @@ var (
 		Buckets: prometheus.ExponentialBuckets(0.01, 2, 12),
 	})
 
+	PlayitSyncs = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Namespace: ns, Name: "playit_syncs_total", Help: "playit.gg tunnel list calls by result.",
+	}, []string{"result"})
+
 	ReconcileApplyErrors = prometheus.NewCounter(prometheus.CounterOpts{
 		Namespace: ns, Name: "reconcile_apply_errors_total", Help: "Failed attempts to create or update server resources.",
 	})
@@ -70,7 +74,7 @@ func Registry(src Source) *prometheus.Registry {
 		collectors.NewGoCollector(),
 		collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}),
 		HTTPRequests, HTTPDuration, Logins, ServerActions, QuotaRejections, ConsoleCommands,
-		RCONCommands, WebSockets, ReconcileRuns, ReconcileDuration, ReconcileApplyErrors,
+		RCONCommands, WebSockets, ReconcileRuns, ReconcileDuration, ReconcileApplyErrors, PlayitSyncs,
 	)
 	if src != nil {
 		r.MustRegister(NewServerCollector(src))

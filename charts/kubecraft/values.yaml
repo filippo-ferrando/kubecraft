@@ -122,6 +122,39 @@ mcRouter:
   tolerations: []
   affinity: {}
 
+# playit.gg: publish servers without a public IP (works behind CGNAT). When enabled,
+# a gateway pod runs the playit agent next to a small gate. For each server, create a
+# Minecraft Java tunnel in the playit dashboard named kubecraft-<slug>, local address
+# 127.0.0.1 and a free local port (the UI suggests one). kubecraft then shows the
+# playit address as the server address and routes that port to the server.
+# Without playit, servers use <slug>.<manager.serverBaseDomain>.
+playit:
+  enabled: false
+  # Secret holding the agent secret key under secretKey.
+  existingSecret: ""
+  secretKey: SECRET_KEY
+  image: ghcr.io/playit-cloud/playit-agent:1.0.8
+  # First local port suggested for new tunnels.
+  firstPort: 30001
+  # playit API; only changed for tests.
+  apiURL: ""
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      cpu: 500m
+      memory: 128Mi
+  gateway:
+    maxConnections: 512
+    resources:
+      requests:
+        cpu: 10m
+        memory: 16Mi
+      limits:
+        cpu: 500m
+        memory: 64Mi
+
 # File sidecar next to each server, for world downloads and config file editing.
 # It runs the manager image in "files" mode.
 files:

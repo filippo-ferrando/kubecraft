@@ -25,11 +25,12 @@ func (c *Client) ContainerStarted(ctx context.Context, slug string) (bool, error
 	return false, nil
 }
 
-// LogStream follows the server log with timestamps. Either tail or since should be set.
-func (c *Client) LogStream(ctx context.Context, slug string, tail *int64, since *metav1.Time) (io.ReadCloser, error) {
+// LogStream reads the server log with timestamps, following it when follow is set.
+// Either tail or since should be set.
+func (c *Client) LogStream(ctx context.Context, slug string, follow bool, tail *int64, since *metav1.Time) (io.ReadCloser, error) {
 	return c.cs.CoreV1().Pods(c.opts.Namespace).GetLogs(PodName(slug), &corev1.PodLogOptions{
 		Container:  "minecraft",
-		Follow:     true,
+		Follow:     follow,
 		Timestamps: true,
 		TailLines:  tail,
 		SinceTime:  since,
