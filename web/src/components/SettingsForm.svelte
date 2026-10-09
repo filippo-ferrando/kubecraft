@@ -60,8 +60,20 @@
         </span>
       </label>
     {/if}
+    {#if meta.playit.enabled}
+      <label class="flex items-start gap-2 text-sm">
+        <input type="checkbox" class="mt-1" bind:checked={settings.public} />
+        <span>
+          Public: reachable from the internet through a playit.gg tunnel.
+          <span class="text-zinc-500">The public address shows up on the server page about a minute after saving.</span>
+        </span>
+      </label>
+    {/if}
     {#if !settings.online_mode}
       <p class="text-sm text-amber-500">Without online mode anyone can join with any name. Enable the whitelist.</p>
+    {/if}
+    {#if settings.public && !settings.whitelist_enabled}
+      <p class="text-sm text-amber-500">A public server without a whitelist can be joined by anyone who finds the address.</p>
     {/if}
   </div>
 </div>

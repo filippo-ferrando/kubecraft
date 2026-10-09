@@ -53,15 +53,23 @@ func NewManager(store *db.Store, kube *k8s.Client) *Manager {
 
 func (m *Manager) Kube() *k8s.Client { return m.kube }
 
-// TunnelSource finds the playit tunnel of a server.
+// TunnelSource keeps the playit tunnels of public servers.
 type TunnelSource interface {
 	Tunnel(slug string) (playit.Tunnel, bool)
-	UsedPorts() map[int]bool
+	Failure(slug string) string
 	LastError() error
+	Want(slugs map[string]bool)
 }
 
-// SetTunnels enables playit: servers with a routable tunnel get its local port.
+// SetTunnels enables playit: public servers with a routable tunnel get its local port.
 func (m *Manager) SetTunnels(t TunnelSource) { m.tunnels = t }
+
+// WantTunnels tells playit which servers must have a tunnel.
+func (m *Manager) WantTunnels(slugs map[string]bool) {
+	if m.tunnels != nil {
+		m.tunnels.Want(slugs)
+	}
+}
 
 // Tunnel returns the playit tunnel of a server and whether playit is in use at all.
 func (m *Manager) Tunnel(slug string) (t playit.Tunnel, found, enabled bool) {
@@ -78,10 +86,14 @@ func (m *Manager) Tunnels() TunnelSource { return m.tunnels }
 // SetContentValidator enables catalog checks for mods and plugins.
 func (m *Manager) SetContentValidator(v ContentValidator) { m.content = v }
 
-// checkAutoSleep rejects auto sleep when mc-router does not scale servers.
-func (m *Manager) checkAutoSleep(s Settings) error {
+// checkFeatures rejects auto sleep when mc-router does not scale servers, and
+// public servers when playit is not configured.
+func (m *Manager) checkFeatures(s Settings) error {
 	if s.AutoSleep && !m.kube.Options().AutoSleep {
 		return invalid("auto sleep is not enabled on this installation")
+	}
+	if s.Public && m.tunnels == nil {
+		return invalid("public servers need playit.gg, which is not configured on this installation")
 	}
 	return nil
 }
@@ -147,7 +159,7 @@ func (m *Manager) Spec(s sqlc.Server, p sqlc.Plan) (k8s.ServerSpec, error) {
 		StorageGB:     p.StorageGb,
 		Running:       s.DesiredState == DesiredRunning,
 		AutoSleep:     settings.AutoSleep,
-		PlayitPort:    m.playitPort(s.Slug),
+		PlayitPort:    m.playitPort(s.Slug, settings.Public),
 		DisplayName:   s.DisplayName,
 		Env:           settings.Env(),
 	}, nil
@@ -235,7 +247,7 @@ func (m *Manager) Create(ctx context.Context, owner uuid.UUID, req CreateRequest
 	if err := m.checkContent(ctx, req.Type, &settings); err != nil {
 		return sqlc.Server{}, err
 	}
-	if err := m.checkAutoSleep(settings); err != nil {
+	if err := m.checkFeatures(settings); err != nil {
 		return sqlc.Server{}, err
 	}
 	settingsJSON, err := json.Marshal(settings)
@@ -469,7 +481,7 @@ func (m *Manager) Update(ctx context.Context, id uuid.UUID, req UpdateRequest, i
 			if err != nil {
 				return err
 			}
-			if err := m.checkAutoSleep(s); err != nil {
+			if err := m.checkFeatures(s); err != nil {
 				return err
 			}
 			// Only ask the catalog when the list changed.
@@ -528,8 +540,8 @@ func isUniqueViolation(err error) bool {
 	return errors.As(err, &pgErr) && pgErr.Code == "23505"
 }
 
-func (m *Manager) playitPort(slug string) int {
-	if t, ok, _ := m.Tunnel(slug); ok && t.Routable {
+func (m *Manager) playitPort(slug string, public bool) int {
+	if t, ok, _ := m.Tunnel(slug); public && ok && t.Routable {
 		return t.LocalPort
 	}
 	return 0

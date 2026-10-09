@@ -70,8 +70,10 @@
             <StatusBadge status={s.status} />
           </div>
           <CopyAddress address={s.address} />
-          {#if s.playit && !s.playit.found}
-            <p class="text-xs text-amber-500">No playit tunnel yet, see the server page.</p>
+          {#if s.playit?.problems?.length}
+            <p class="text-xs text-red-500">playit tunnel has a problem, see the server page.</p>
+          {:else if s.playit && !s.playit.found}
+            <p class="text-xs text-amber-500">Public tunnel is being created.</p>
           {:else if s.playit && !s.playit.online}
             <p class="text-xs text-red-500">playit tunnel has a problem, see the server page.</p>
           {/if}

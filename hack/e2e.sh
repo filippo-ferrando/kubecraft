@@ -78,8 +78,8 @@ kind: Secret
 metadata: {name: kubecraft-db}
 stringData: {username: kubecraft, password: "pw/with+special=chars"}
 EOF
-# Fake playit API with one tunnel, kubecraft-e2e on local port 30005 (shape copied
-# from a real response). The real agent container just fails to log in here.
+# Fake playit API that keeps tunnels in memory; kubecraft creates kubecraft-e2e on
+# local port 30005 (the first port). The real agent container just fails to log in here.
 kubectl -n minecraft create secret generic playit --from-literal=SECRET_KEY=e2e >/dev/null
 kubectl -n minecraft create configmap fake-playit --from-file=server.py="$ROOT/hack/fake_playit.py" >/dev/null
 kubectl -n minecraft apply -f - >/dev/null <<'YAML'
@@ -113,7 +113,7 @@ docker run --rm --network host -v "$ROOT/charts:/apps" -v "$KUBECONFIG:/kubeconf
   --set secrets.sessionSecret=e2e-session-secret-e2e-session-secret \
   --set secrets.bootstrapAdminUser=admin --set secrets.bootstrapAdminPassword=admin-password \
   --set mcRouter.autoScale.downAfter=1m \
-  --set playit.enabled=true --set playit.existingSecret=playit --set playit.apiURL=http://fake-playit.minecraft.svc \
+  --set playit.enabled=true --set playit.existingSecret=playit --set playit.apiURL=http://fake-playit.minecraft.svc --set playit.firstPort=30005 \
   --set database.host=pg.minecraft.svc --set database.sslmode=disable --set database.credentialsSecret.name=kubecraft-db >/dev/null
 
 kubectl -n minecraft rollout status deploy/kc-kubecraft --timeout=5m >/dev/null
@@ -130,7 +130,7 @@ api GET "/catalog/search?type=PAPER&version=LATEST&q=chunky" | json '[h["slug"] 
 
 step "creating a Paper server with a plugin"
 PLAN=$(api GET /plans | json '[p["id"] for p in d if p["name"]=="Small"][0]')
-ID=$(api POST /servers "{\"slug\":\"e2e\",\"type\":\"PAPER\",\"version\":\"LATEST\",\"plan_id\":\"$PLAN\",\"settings\":{\"motd\":\"kubecraft e2e\",\"modrinth_projects\":[\"chunky\"]},\"accept_eula\":true}" | json 'd["id"]')
+ID=$(api POST /servers "{\"slug\":\"e2e\",\"type\":\"PAPER\",\"version\":\"LATEST\",\"plan_id\":\"$PLAN\",\"settings\":{\"motd\":\"kubecraft e2e\",\"public\":true,\"modrinth_projects\":[\"chunky\"]},\"accept_eula\":true}" | json 'd["id"]')
 
 state() { api GET "/servers/$ID" | json 'd["status"]["state"]'; }
 wait_state() {
@@ -183,7 +183,7 @@ backup_has_world() {
 step "downloading a world backup (running)"
 backup_has_world
 
-step "playit: the tunnel address is the server address, its port reaches only this server"
+step "playit: the public server gets a tunnel, its address and port reach only this server"
 addr() { api GET "/servers/$ID" | json 'd["address"]'; }
 for _ in $(seq 20); do [ "$(addr)" = "e2e-tunnel.tun.ply.gg" ] && break; sleep 3; done
 [ "$(addr)" = "e2e-tunnel.tun.ply.gg" ] || fail "playit address not used"
@@ -200,6 +200,18 @@ out=$(docker run --rm --network host --add-host "anything.example:127.0.0.1" itz
 kill $GPF 2>/dev/null || true
 echo "$out"
 echo "$out" | grep -q "motd='kubecraft e2e'" || fail "gateway did not reach the server"
+
+step "playit: a private server loses its tunnel"
+SETTINGS=$(api GET "/servers/$ID" | json 'json.dumps({**d["settings"], "public": False})')
+api PATCH "/servers/$ID" "{\"settings\":$SETTINGS}" >/dev/null
+for _ in $(seq 20); do [ "$(addr)" = "e2e.mine.test" ] && break; sleep 3; done
+[ "$(addr)" = "e2e.mine.test" ] || fail "private server still uses the playit address"
+FP=$(kubectl -n minecraft get pod -l app=fake-playit -o name | head -1)
+for _ in $(seq 20); do
+  kubectl -n minecraft exec "$FP" -- wget -qO- --post-data '{}' http://localhost:8080/v1/tunnels/list | grep -q kubecraft-e2e || break
+  sleep 3
+done
+kubectl -n minecraft exec "$FP" -- wget -qO- --post-data '{}' http://localhost:8080/v1/tunnels/list | grep -q kubecraft-e2e && fail "tunnel not deleted"
 
 step "stop keeps the world, start brings it back"
 api POST "/servers/$ID/stop" >/dev/null

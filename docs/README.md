@@ -20,7 +20,7 @@ kubecraft is a web app that lets users create and run their own Minecraft server
 | [Files and backups](components/files-and-backups.md) | File sidecar, helper pod, config editor, backup downloads |
 | [Quotas and plans](components/quotas-and-plans.md) | Plans, per-user limits, how checks avoid races |
 | [Mods and plugins](components/mods-and-plugins.md) | Modrinth catalog, validation, how files reach the server |
-| [playit.gg](components/playit.md) | Optional public access behind CGNAT: tunnel discovery, gateway, routing by port |
+| [playit.gg](components/playit.md) | Optional public access behind CGNAT: managed tunnels, gateway, routing by port |
 | [Metrics](components/metrics.md) | Prometheus endpoint, series, alerts |
 | [Frontend](components/frontend.md) | Svelte app, pages, how it talks to the API |
 

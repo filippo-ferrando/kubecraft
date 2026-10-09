@@ -73,32 +73,31 @@ func (s *Server) toServerJSON(srv sqlc.Server, plan sqlc.Plan) serverJSON {
 	})
 }
 
-// playitJSON tells the UI about the server's tunnel, or how to create it.
+// playitJSON tells the UI about the tunnel of a public server.
 type playitJSON struct {
-	TunnelName    string   `json:"tunnel_name"`
-	Found         bool     `json:"found"`
-	Online        bool     `json:"online"`
-	Address       string   `json:"address,omitempty"`
-	LocalIP       string   `json:"local_ip"`
-	LocalPort     int      `json:"local_port,omitempty"`
-	SuggestedPort int      `json:"suggested_port,omitempty"`
-	Problems      []string `json:"problems,omitempty"`
+	TunnelName string   `json:"tunnel_name"`
+	Found      bool     `json:"found"`
+	Online     bool     `json:"online"`
+	Address    string   `json:"address,omitempty"`
+	LocalPort  int      `json:"local_port,omitempty"`
+	Problems   []string `json:"problems,omitempty"`
 }
 
-// withPlayit fills the playit block and, when a tunnel exists, uses its address.
+// withPlayit fills the playit block of public servers and, once their tunnel
+// can be routed, uses its address.
 func (s *Server) withPlayit(j serverJSON) serverJSON {
 	t, found, enabled := s.mgr.Tunnel(j.Slug)
-	if !enabled {
+	if !enabled || !j.Settings.Public {
 		return j
 	}
-	p := &playitJSON{TunnelName: playit.Prefix + j.Slug, Found: found, LocalIP: playit.LocalIP}
+	p := &playitJSON{TunnelName: playit.Prefix + j.Slug, Found: found}
 	if found {
 		p.Online, p.Address, p.LocalPort, p.Problems = t.Online, t.Address, t.LocalPort, t.Problems
-		if t.Address != "" {
+		if t.Address != "" && t.Routable {
 			j.Address = t.Address
 		}
-	} else {
-		p.SuggestedPort = playit.SuggestPort(s.mgr.Tunnels().UsedPorts(), s.cfg.PlayitFirstPort)
+	} else if msg := s.mgr.Tunnels().Failure(j.Slug); msg != "" {
+		p.Problems = []string{msg}
 	}
 	j.Playit = p
 	return j
@@ -397,13 +396,13 @@ func (s *Server) listVersions(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, l)
 }
 
-// playitMeta says whether playit is on and, for admins, whether listing tunnels works.
+// playitMeta says whether playit is on and, for admins, whether syncing tunnels works.
 func (s *Server) playitMeta(r *http.Request) map[string]any {
 	src := s.mgr.Tunnels()
 	if src == nil {
 		return map[string]any{"enabled": false}
 	}
-	m := map[string]any{"enabled": true, "first_port": s.cfg.PlayitFirstPort}
+	m := map[string]any{"enabled": true}
 	if err := src.LastError(); err != nil && mustIdentity(r).IsAdmin() {
 		m["error"] = err.Error()
 	}

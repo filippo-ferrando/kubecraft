@@ -72,10 +72,10 @@ Chart: `charts/kubecraft`, published as `oci://git.internal.fferrando.cc/rdfilip
 
 | Value | Default | Notes |
 |---|---|---|
-| `playit.enabled` | `false` | Deploys the playit gateway and makes servers use their tunnel address |
-| `playit.existingSecret`, `secretKey` | `""`, `SECRET_KEY` | Secret with the playit agent key |
+| `playit.enabled` | `false` | Deploys the playit gateway and enables the Public server setting |
+| `playit.existingSecret`, `secretKey` | `""`, `SECRET_KEY` | Secret with the key of a self-managed agent, made by `hack/playit-claim.sh` |
 | `playit.image` | `ghcr.io/playit-cloud/playit-agent:1.0.8` | |
-| `playit.firstPort` | `30001` | First local port suggested for new tunnels |
+| `playit.firstPort` | `30001` | First local port given to new tunnels |
 | `playit.resources`, `playit.gateway.resources`, `playit.gateway.maxConnections` | small, `512` | |
 | `playit.apiURL` | `""` | Only for tests |
 

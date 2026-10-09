@@ -81,7 +81,29 @@ func (r *Reconciler) once(ctx context.Context) error {
 		r.server(ctx, s, plans[s.PlanID], snap)
 	}
 	r.orphans(ctx, snap, known)
+	if public, ok := publicSlugs(rows); ok {
+		r.mgr.WantTunnels(public)
+	}
 	return nil
+}
+
+// publicSlugs lists servers that want a playit tunnel. It fails on unreadable
+// settings, so a broken row never gets its tunnel deleted by mistake.
+func publicSlugs(rows []sqlc.Server) (map[string]bool, bool) {
+	out := map[string]bool{}
+	for _, s := range rows {
+		if s.DesiredState == servers.DesiredDeleting {
+			continue
+		}
+		settings, err := servers.ParseSettings(s.Settings)
+		if err != nil {
+			return nil, false
+		}
+		if settings.Public {
+			out[s.Slug] = true
+		}
+	}
+	return out, true
 }
 
 func (r *Reconciler) server(ctx context.Context, s sqlc.Server, plan sqlc.Plan, snap *k8s.Snapshot) {

@@ -92,6 +92,8 @@ type Settings struct {
 	OnlineMode       bool     `json:"online_mode"`
 	// AutoSleep stops the server when idle and starts it when a player joins.
 	AutoSleep bool `json:"auto_sleep"`
+	// Public gives the server a playit.gg tunnel, when playit is configured.
+	Public bool `json:"public"`
 	// Modrinth project slugs (mods or plugins), downloaded by the server on start.
 	ModrinthProjects []string `json:"modrinth_projects"`
 }

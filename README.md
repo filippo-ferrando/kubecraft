@@ -7,7 +7,7 @@ Multi-user Minecraft server manager for Kubernetes (k3s). Users create and run t
 - Per-user quotas (servers, RAM, CPU, disk) and admin-managed plans.
 - Plugin servers (Paper, Purpur) and modded servers (Fabric, Forge, NeoForge) with a searchable Modrinth catalog.
 - Live logs, an RCON console in the browser, player management, CPU/RAM usage.
-- Optional public access through playit.gg (works behind CGNAT): a server's playit tunnel address becomes its address.
+- Optional public access through playit.gg (works behind CGNAT): servers marked Public get a playit tunnel, created and removed by kubecraft.
 - Auto sleep: idle servers stop and start again when a player joins.
 - World and full-server backup downloads, and an editor for plugin and mod config files.
 - Helm chart in `charts/kubecraft`, ready for ArgoCD.
@@ -233,8 +233,8 @@ Server resources are created by the manager, not by ArgoCD, so they do not show 
 | `LISTEN_ADDR` | `:8080` | HTTP listen address |
 | `FILES_IMAGE` | | Image of the file sidecar (the chart sets the manager image), empty disables files and backups |
 | `AUTO_SLEEP` / `AUTO_SLEEP_IDLE` | `false` / `15m` | Whether mc-router auto scales, and its idle time (shown in the UI) |
-| `PLAYIT_SECRET` | | playit agent key; enables tunnel discovery (see docs/components/playit.md) |
-| `PLAYIT_FIRST_PORT` / `PLAYIT_API` | `30001` / `https://api.playit.gg` | First suggested local port, API URL |
+| `PLAYIT_SECRET` | | Key of a self-managed playit agent; enables public servers (see docs/components/playit.md) |
+| `PLAYIT_FIRST_PORT` / `PLAYIT_API` | `30001` / `https://api.playit.gg` | First local port given to tunnels, API URL |
 | `METRICS_ADDR` | `:9090` | Prometheus listen address, set to an empty value to disable |
 | `IN_CLUSTER` / `KUBECONFIG` | `true` | Outside a cluster, set `IN_CLUSTER=false` to use a kubeconfig |
 
@@ -332,7 +332,7 @@ internal/config      environment config
 internal/db          migrations, sqlc queries and generated code
 internal/k8s         resource builders, ensure/scale/delete, state mapping, logs
 internal/files       file sidecar: listing, editing, tar.gz backups
-internal/playit      playit.gg tunnel discovery
+internal/playit      playit.gg tunnel management
 internal/gate        playit gateway: one port per tunnel, handshake rewrite
 internal/live        RCON pool, player list parsing, stats poller
 internal/metrics     Prometheus metrics and the per-server collector

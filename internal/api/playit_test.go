@@ -16,8 +16,10 @@ import (
 
 // fakeTunnels stands in for the playit watcher.
 type fakeTunnels struct {
-	mu sync.Mutex
-	m  map[string]playit.Tunnel
+	mu       sync.Mutex
+	m        map[string]playit.Tunnel
+	failures map[string]string
+	wanted   map[string]bool
 }
 
 func (f *fakeTunnels) set(slug string, t playit.Tunnel) {
@@ -37,30 +39,36 @@ func (f *fakeTunnels) Tunnel(slug string) (playit.Tunnel, bool) {
 	return t, ok
 }
 
-func (f *fakeTunnels) UsedPorts() map[int]bool {
+func (f *fakeTunnels) Failure(slug string) string {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	out := map[int]bool{}
-	for _, t := range f.m {
-		out[t.LocalPort] = true
-	}
-	return out
+	return f.failures[slug]
+}
+
+func (f *fakeTunnels) Want(slugs map[string]bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.wanted = slugs
 }
 
 func (f *fakeTunnels) LastError() error { return nil }
 
+func publicReq(slug string, plan planJSON, public bool) map[string]any {
+	req := createReq(slug, plan)
+	req["settings"].(map[string]any)["public"] = public
+	return req
+}
+
 func TestPlayitTunnels(t *testing.T) {
-	tunnels := &fakeTunnels{m: map[string]playit.Tunnel{
-		"other": {Name: "kubecraft-other", Slug: "other", LocalPort: 30001, Routable: true, Online: true},
-	}}
+	tunnels := &fakeTunnels{m: map[string]playit.Tunnel{}, failures: map[string]string{}}
 	e := newTestEnv(t, func(d *Deps) {
 		d.Config.PlayitSecret = "key"
-		d.Config.PlayitFirstPort = 30001
 		d.Mgr.SetTunnels(tunnels)
 	})
 	e.createUser("alice", auth.RoleUser, false)
 	a := e.login("alice")
 	ctx := context.Background()
+	rec := reconcile.New(e.store, e.deps.Mgr)
 
 	var meta struct {
 		Playit struct {
@@ -72,22 +80,41 @@ func TestPlayitTunnels(t *testing.T) {
 		t.Fatal("playit not reported")
 	}
 
-	// Before the tunnel exists: private address and instructions.
+	// A private server has no playit block and wants no tunnel.
+	var priv serverJSON
+	a.do("POST", "/api/servers", publicReq("lan", e.plan("Small"), false)).expect(http.StatusCreated).decode(&priv)
+	if priv.Playit != nil || priv.Address != "lan.mine.test" {
+		t.Fatalf("private: %+v", priv)
+	}
+
+	// A public server asks for a tunnel; until it exists the private address is used.
 	var srv serverJSON
-	a.do("POST", "/api/servers", createReq("survival", e.plan("Small"))).expect(http.StatusCreated).decode(&srv)
-	if srv.Address != "survival.mine.test" || srv.Playit == nil || srv.Playit.Found ||
-		srv.Playit.TunnelName != "kubecraft-survival" || srv.Playit.SuggestedPort != 30002 || srv.Playit.LocalIP != "127.0.0.1" {
+	a.do("POST", "/api/servers", publicReq("survival", e.plan("Small"), true)).expect(http.StatusCreated).decode(&srv)
+	if srv.Address != "survival.mine.test" || srv.Playit == nil || srv.Playit.Found || srv.Playit.TunnelName != "kubecraft-survival" {
 		t.Fatalf("no tunnel yet: %+v %+v", srv, srv.Playit)
+	}
+	if err := rec.Once(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if len(tunnels.wanted) != 1 || !tunnels.wanted["survival"] {
+		t.Fatalf("wanted: %v", tunnels.wanted)
+	}
+
+	// A failed create is shown on the server.
+	tunnels.failures["survival"] = "playit: the playit.gg account has no free tunnels left"
+	base := "/api/servers/" + srv.ID.String()
+	srv = serverJSON{}
+	a.do("GET", base, nil).expect(http.StatusOK).decode(&srv)
+	if len(srv.Playit.Problems) != 1 {
+		t.Fatalf("failure not shown: %+v", srv.Playit)
 	}
 
 	// The tunnel shows up: the playit address becomes the address and the gateway gets the port.
 	tunnels.set("survival", playit.Tunnel{Name: "kubecraft-survival", Slug: "survival", Address: "fried-dome.tun.ply.gg",
 		LocalIP: "127.0.0.1", LocalPort: 30002, Routable: true, Online: true})
-	rec := reconcile.New(e.store, e.deps.Mgr)
 	if err := rec.Once(ctx); err != nil {
 		t.Fatal(err)
 	}
-	base := "/api/servers/" + srv.ID.String()
 	srv = serverJSON{}
 	a.do("GET", base, nil).expect(http.StatusOK).decode(&srv)
 	if srv.Address != "fried-dome.tun.ply.gg" || srv.PrivateAddress != "survival.mine.test" || !srv.Playit.Online || srv.Playit.LocalPort != 30002 {
@@ -98,31 +125,22 @@ func TestPlayitTunnels(t *testing.T) {
 		t.Fatalf("service: %v %v", svc.Labels, svc.Annotations)
 	}
 
-	// A misconfigured tunnel is shown but never routed.
-	tunnels.set("survival", playit.Tunnel{Name: "kubecraft-survival", Slug: "survival", Address: "fried-dome.tun.ply.gg",
-		LocalIP: "192.168.1.9", LocalPort: 30002, Problems: []string{"local address must be 127.0.0.1"}})
+	// Turned private: no tunnel wanted, the port leaves the Service even before the tunnel is gone.
+	a.do("PATCH", base, map[string]any{"settings": map[string]any{"public": false}}).expect(http.StatusOK)
 	if err := rec.Once(ctx); err != nil {
 		t.Fatal(err)
+	}
+	if len(tunnels.wanted) != 0 {
+		t.Fatalf("still wanted: %v", tunnels.wanted)
 	}
 	svc, _ = e.kube.CoreV1().Services("minecraft").Get(ctx, "mc-survival", metav1.GetOptions{})
 	if svc.Labels[k8s.LabelPlayit] != "false" || svc.Annotations[k8s.AnnotationPlayitPort] != "" {
-		t.Fatalf("bad tunnel routed: %v %v", svc.Labels, svc.Annotations)
+		t.Fatalf("private server routed: %v %v", svc.Labels, svc.Annotations)
 	}
 	srv = serverJSON{}
 	a.do("GET", base, nil).expect(http.StatusOK).decode(&srv)
-	if srv.Playit.Online || len(srv.Playit.Problems) == 0 {
-		t.Fatalf("problems not shown: %+v", srv.Playit)
-	}
-
-	// Tunnel deleted: back to the private address, port removed.
-	tunnels.set("survival", playit.Tunnel{})
-	if err := rec.Once(ctx); err != nil {
-		t.Fatal(err)
-	}
-	srv = serverJSON{}
-	a.do("GET", base, nil).expect(http.StatusOK).decode(&srv)
-	if srv.Address != "survival.mine.test" || srv.Playit.Found {
-		t.Fatalf("after delete: %+v", srv)
+	if srv.Address != "survival.mine.test" || srv.Playit != nil {
+		t.Fatalf("after private: %+v", srv)
 	}
 }
 
@@ -135,4 +153,5 @@ func TestNoPlayit(t *testing.T) {
 	if srv.Address != "plain.mine.test" || srv.Playit != nil {
 		t.Fatalf("without playit: %+v", srv)
 	}
+	a.do("POST", "/api/servers", publicReq("open", e.plan("Small"), true)).expect(http.StatusBadRequest)
 }

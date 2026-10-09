@@ -61,6 +61,10 @@ var (
 		Namespace: ns, Name: "playit_syncs_total", Help: "playit.gg tunnel list calls by result.",
 	}, []string{"result"})
 
+	PlayitTunnelActions = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Namespace: ns, Name: "playit_tunnel_actions_total", Help: "playit.gg tunnels created or deleted by kubecraft, by result.",
+	}, []string{"action", "result"})
+
 	ReconcileApplyErrors = prometheus.NewCounter(prometheus.CounterOpts{
 		Namespace: ns, Name: "reconcile_apply_errors_total", Help: "Failed attempts to create or update server resources.",
 	})
@@ -74,7 +78,7 @@ func Registry(src Source) *prometheus.Registry {
 		collectors.NewGoCollector(),
 		collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}),
 		HTTPRequests, HTTPDuration, Logins, ServerActions, QuotaRejections, ConsoleCommands,
-		RCONCommands, WebSockets, ReconcileRuns, ReconcileDuration, ReconcileApplyErrors, PlayitSyncs,
+		RCONCommands, WebSockets, ReconcileRuns, ReconcileDuration, ReconcileApplyErrors, PlayitSyncs, PlayitTunnelActions,
 	)
 	if src != nil {
 		r.MustRegister(NewServerCollector(src))

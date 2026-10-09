@@ -38,6 +38,7 @@ export interface Settings {
   online_mode: boolean;
   modrinth_projects: string[];
   auto_sleep: boolean;
+  public: boolean;
 }
 
 export interface CatalogProject {
@@ -65,9 +66,7 @@ export interface PlayitStatus {
   found: boolean;
   online: boolean;
   address?: string;
-  local_ip: string;
   local_port?: number;
-  suggested_port?: number;
   problems?: string[];
 }
 
@@ -128,7 +127,7 @@ export interface Meta {
   auto_sleep: boolean;
   auto_sleep_idle: string;
   files: boolean;
-  playit: { enabled: boolean; first_port?: number; error?: string };
+  playit: { enabled: boolean; error?: string };
 }
 
 export interface FileEntry {

@@ -110,9 +110,9 @@ func run() error {
 	catalog := modrinth.New(modrinth.DefaultBaseURL, "kubecraft/"+version+" (git.fferrando.cc/rdfilippo/kubecraft)")
 	mgr.SetContentValidator(catalog)
 
-	// playit.gg: find each server's tunnel; the gateway pod serves its local port.
+	// playit.gg: one tunnel per public server; the gateway pod serves its local port.
 	if cfg.PlayitEnabled() {
-		tunnels := playit.NewWatcher(playit.NewClient(cfg.PlayitAPI, cfg.PlayitSecret), nil)
+		tunnels := playit.NewWatcher(playit.NewClient(cfg.PlayitAPI, cfg.PlayitSecret), cfg.PlayitFirstPort, nil)
 		go tunnels.Run(ctx, 30*time.Second)
 		mgr.SetTunnels(tunnels)
 	}
