@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"testing"
 
@@ -13,6 +14,16 @@ func TestHealth(t *testing.T) {
 	c := e.client()
 	c.do("GET", "/healthz", nil).expect(http.StatusOK)
 	c.do("GET", "/readyz", nil).expect(http.StatusOK)
+}
+
+func TestReadyzHidesErrorDetail(t *testing.T) {
+	e := newTestEnv(t, func(d *Deps) {
+		d.Ready = func(context.Context) error { return errors.New("secret internal detail") }
+	})
+	res := e.client().do("GET", "/readyz", nil).expect(http.StatusServiceUnavailable)
+	if msg := res.errorMsg(); msg != "not ready" {
+		t.Fatalf("readyz leaked %q", msg)
+	}
 }
 
 func TestLoginFlow(t *testing.T) {

@@ -219,8 +219,9 @@ func (s *Server) clearCookie(w http.ResponseWriter) {
 	})
 }
 
-// clientIP uses X-Forwarded-For only when the direct peer is a private address (the ingress).
-func clientIP(r *http.Request) string {
+// clientIP trusts proxy headers only when the direct peer is a private address (the ingress).
+// The configured client IP header wins over X-Forwarded-For.
+func (s *Server) clientIP(r *http.Request) string {
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
 		host = r.RemoteAddr
@@ -228,6 +229,11 @@ func clientIP(r *http.Request) string {
 	ip := net.ParseIP(host)
 	if ip == nil || (!ip.IsPrivate() && !ip.IsLoopback()) {
 		return host
+	}
+	if s.cfg.ClientIPHeader != "" {
+		if v := strings.TrimSpace(r.Header.Get(s.cfg.ClientIPHeader)); net.ParseIP(v) != nil {
+			return v
+		}
 	}
 	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
 		parts := strings.Split(xff, ",")

@@ -52,7 +52,7 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnauthorized, auth.ErrInvalidCredentials.Error())
 		return
 	}
-	token, u, err := s.auth.Login(r.Context(), req.Username, req.Password, clientIP(r), r.UserAgent())
+	token, u, err := s.auth.Login(r.Context(), req.Username, req.Password, s.clientIP(r), r.UserAgent())
 	var rl *auth.RateLimitedError
 	switch {
 	case errors.As(err, &rl):

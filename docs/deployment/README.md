@@ -26,7 +26,7 @@ kubecraft never deploys a database. Without `database.host` + `database.credenti
 
 ## Steps
 
-1. **Database**: create a role and a database owned by it. With CloudNativePG see [examples/cnpg-database.yaml](examples/cnpg-database.yaml). If the database namespace has a NetworkPolicy, allow the kubecraft namespace.
+1. **Database**: create a role and a database owned by it. With CloudNativePG see [examples/cnpg-database.yaml](examples/cnpg-database.yaml). If the database namespace has a NetworkPolicy, allow only the manager pod (`app.kubernetes.io/name: kubecraft-manager` in the kubecraft namespace), not the whole namespace: game servers run user code.
 2. **Secrets** in the kubecraft namespace:
    - the database credentials (`username`, `password`), the same values as the role,
    - `kubecraft-secrets` with `SESSION_SECRET`, `BOOTSTRAP_ADMIN_USER`, `BOOTSTRAP_ADMIN_PASSWORD`.
@@ -37,9 +37,10 @@ kubecraft never deploys a database. Without `database.host` + `database.credenti
    helm install kubecraft oci://git.internal.fferrando.cc/rdfilippo/kubecraft \
      --version 0.1.0 -n minecraft --create-namespace -f values-homelab.yaml
    ```
-5. **DNS**: point the UI host at the ingress and `*.<serverBaseDomain>` at the mc-router Service address (`kubectl -n minecraft get svc kubecraft-mc-router`).
-6. **First login**: open the UI, log in as the bootstrap admin, set a new password, create users and quotas.
-7. **Check**: create a small Paper server, wait for "Running", connect to `<slug>.<serverBaseDomain>`.
+5. **Pod security**: label the namespace with `pod-security.kubernetes.io/enforce: restricted`. Every pod of the chart and every game server meets it, and it stops a compromised manager or mc-router from starting privileged pods.
+6. **DNS**: point the UI host at the ingress and `*.<serverBaseDomain>` at the mc-router Service address (`kubectl -n minecraft get svc kubecraft-mc-router`).
+7. **First login**: open the UI, log in as the bootstrap admin, set a new password, create users and quotas.
+8. **Check**: create a small Paper server, wait for "Running", connect to `<slug>.<serverBaseDomain>`.
 
 ## What the install creates
 

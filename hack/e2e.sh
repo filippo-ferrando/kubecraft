@@ -48,8 +48,11 @@ docker build -q -t kubecraft:e2e "$ROOT" >/dev/null
 docker save kubecraft:e2e | docker exec -i "$NAME" ctr images import - >/dev/null
 
 step "installing postgres and the chart"
+# Test helpers live in their own namespace: minecraft enforces the restricted pod profile.
 kubectl create ns minecraft >/dev/null
-kubectl -n minecraft apply -f - >/dev/null <<'EOF'
+kubectl label ns minecraft pod-security.kubernetes.io/enforce=restricted >/dev/null
+kubectl create ns e2e-deps >/dev/null
+kubectl -n e2e-deps apply -f - >/dev/null <<'EOF'
 apiVersion: apps/v1
 kind: Deployment
 metadata: {name: pg}
@@ -72,7 +75,8 @@ metadata: {name: pg}
 spec:
   selector: {app: pg}
   ports: [{port: 5432}]
----
+EOF
+kubectl -n minecraft apply -f - >/dev/null <<'EOF'
 apiVersion: v1
 kind: Secret
 metadata: {name: kubecraft-db}
@@ -81,8 +85,8 @@ EOF
 # Fake playit API that keeps tunnels in memory; kubecraft creates kubecraft-e2e on
 # local port 30005 (the first port). The real agent container just fails to log in here.
 kubectl -n minecraft create secret generic playit --from-literal=SECRET_KEY=e2e >/dev/null
-kubectl -n minecraft create configmap fake-playit --from-file=server.py="$ROOT/hack/fake_playit.py" >/dev/null
-kubectl -n minecraft apply -f - >/dev/null <<'YAML'
+kubectl -n e2e-deps create configmap fake-playit --from-file=server.py="$ROOT/hack/fake_playit.py" >/dev/null
+kubectl -n e2e-deps apply -f - >/dev/null <<'YAML'
 apiVersion: apps/v1
 kind: Deployment
 metadata: {name: fake-playit}
@@ -113,8 +117,8 @@ docker run --rm --network host -v "$ROOT/charts:/apps" -v "$KUBECONFIG:/kubeconf
   --set secrets.sessionSecret=e2e-session-secret-e2e-session-secret \
   --set secrets.bootstrapAdminUser=admin --set secrets.bootstrapAdminPassword=admin-password \
   --set mcRouter.autoScale.downAfter=1m \
-  --set playit.enabled=true --set playit.existingSecret=playit --set playit.apiURL=http://fake-playit.minecraft.svc --set playit.firstPort=30005 \
-  --set database.host=pg.minecraft.svc --set database.sslmode=disable --set database.credentialsSecret.name=kubecraft-db >/dev/null
+  --set playit.enabled=true --set playit.existingSecret=playit --set playit.apiURL=http://fake-playit.e2e-deps.svc --set playit.firstPort=30005 \
+  --set database.host=pg.e2e-deps.svc --set database.sslmode=disable --set database.credentialsSecret.name=kubecraft-db >/dev/null
 
 kubectl -n minecraft rollout status deploy/kc-kubecraft --timeout=5m >/dev/null
 kubectl -n minecraft port-forward svc/kc-kubecraft "$UI_PORT:80" >/dev/null 2>&1 &
@@ -155,6 +159,14 @@ kubectl -n minecraft get pod mc-e2e-0 -o jsonpath='{.spec.containers[0].env[?(@.
 
 step "checking the plugin was downloaded"
 kubectl -n minecraft exec mc-e2e-0 -c minecraft -- ls /data/plugins | grep -i chunky || fail "plugin not installed"
+
+step "game servers cannot reach the cluster"
+# The plugin download above already proved DNS and internet access work.
+reach() { kubectl -n minecraft exec mc-e2e-0 -c minecraft -- timeout 5 bash -c "</dev/tcp/$1/$2" 2>/dev/null; }
+reach 127.0.0.1 25565 || fail "connection check does not work in the game pod"
+reach pg.e2e-deps.svc.cluster.local 5432 && fail "game server reached postgres"
+reach kubernetes.default.svc.cluster.local 443 && fail "game server reached the API server"
+reach kc-kubecraft.minecraft.svc.cluster.local 80 && fail "game server reached the manager"
 
 step "scraping prometheus metrics"
 kubectl -n minecraft port-forward svc/kc-kubecraft-metrics 19090:9090 >/dev/null 2>&1 &
@@ -206,12 +218,12 @@ SETTINGS=$(api GET "/servers/$ID" | json 'json.dumps({**d["settings"], "public":
 api PATCH "/servers/$ID" "{\"settings\":$SETTINGS}" >/dev/null
 for _ in $(seq 20); do [ "$(addr)" = "e2e.mine.test" ] && break; sleep 3; done
 [ "$(addr)" = "e2e.mine.test" ] || fail "private server still uses the playit address"
-FP=$(kubectl -n minecraft get pod -l app=fake-playit -o name | head -1)
+FP=$(kubectl -n e2e-deps get pod -l app=fake-playit -o name | head -1)
 for _ in $(seq 20); do
-  kubectl -n minecraft exec "$FP" -- wget -qO- --post-data '{}' http://localhost:8080/v1/tunnels/list | grep -q kubecraft-e2e || break
+  kubectl -n e2e-deps exec "$FP" -- wget -qO- --post-data '{}' http://127.0.0.1:8080/v1/tunnels/list | grep -q kubecraft-e2e || break
   sleep 3
 done
-kubectl -n minecraft exec "$FP" -- wget -qO- --post-data '{}' http://localhost:8080/v1/tunnels/list | grep -q kubecraft-e2e && fail "tunnel not deleted"
+kubectl -n e2e-deps exec "$FP" -- wget -qO- --post-data '{}' http://127.0.0.1:8080/v1/tunnels/list | grep -q kubecraft-e2e && fail "tunnel not deleted"
 
 step "stop keeps the world, start brings it back"
 api POST "/servers/$ID/stop" >/dev/null

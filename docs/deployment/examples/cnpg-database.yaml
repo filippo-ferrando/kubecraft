@@ -28,7 +28,11 @@ spec:
   cluster:
     name: homelab-db
 ---
-# Add this entry to apps/database/networkpolicy.yaml so the manager can reach Postgres:
+# Add this entry to apps/database/networkpolicy.yaml so the manager can reach Postgres.
+# Both selectors in one entry: only the manager pod, not the game servers next to it.
 #   - namespaceSelector:
 #       matchLabels:
 #         kubernetes.io/metadata.name: minecraft
+#     podSelector:
+#       matchLabels:
+#         app.kubernetes.io/name: kubecraft-manager

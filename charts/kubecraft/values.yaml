@@ -18,6 +18,9 @@ manager:
   sessionTTL: 168h
   # Extra origins accepted for state-changing requests, comma separated.
   allowedOrigins: ""
+  # Header with the real client IP set by the proxy in front (for example Cf-Connecting-Ip
+  # behind Cloudflare). Used for login rate limits and the audit log; empty uses X-Forwarded-For.
+  clientIPHeader: ""
   jvmHeapRatio: "0.75"
   defaultMaxServers: 2
   # Storage class for world volumes, empty uses the cluster default.
@@ -207,3 +210,23 @@ networkPolicy:
     - namespaceSelector:
         matchLabels:
           kubernetes.io/metadata.name: traefik
+  # Outbound traffic of game servers. Users can run any mod or plugin, so the pods only
+  # get DNS and the internet, never the cluster, the LAN, or the tailnet.
+  serverEgress:
+    enabled: true
+    # Where DNS queries go (CoreDNS on k3s).
+    dnsTo:
+      - namespaceSelector:
+          matchLabels:
+            kubernetes.io/metadata.name: kube-system
+        podSelector:
+          matchLabels:
+            k8s-app: kube-dns
+    # Ranges blocked inside 0.0.0.0/0: private, CGNAT and tailnet, link local, loopback.
+    blockedCIDRs:
+      - 10.0.0.0/8
+      - 172.16.0.0/12
+      - 192.168.0.0/16
+      - 100.64.0.0/10
+      - 169.254.0.0/16
+      - 127.0.0.0/8

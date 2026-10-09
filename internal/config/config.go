@@ -41,6 +41,8 @@ type Config struct {
 	LogLevel         slog.Level
 	// AllowedOrigins are extra origins accepted for CSRF and WebSocket checks.
 	AllowedOrigins []string
+	// ClientIPHeader holds the real client IP set by a trusted proxy, for example Cf-Connecting-Ip.
+	ClientIPHeader string
 	// InCluster is false when running outside k8s (dev mode, uses KUBECONFIG).
 	InCluster  bool
 	Kubeconfig string
@@ -72,6 +74,7 @@ func Load(lookup func(string) (string, bool)) (*Config, error) {
 		AutoSleepIdle:    get("AUTO_SLEEP_IDLE", "15m"),
 		PlayitSecret:     strings.TrimSpace(get("PLAYIT_SECRET", "")),
 		PlayitAPI:        get("PLAYIT_API", "https://api.playit.gg"),
+		ClientIPHeader:   strings.TrimSpace(get("CLIENT_IP_HEADER", "")),
 	}
 
 	// An empty URL makes pgx read the standard PG* variables instead.

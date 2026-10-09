@@ -100,3 +100,15 @@ func TestPlayitConfig(t *testing.T) {
 		t.Fatal("privileged first port accepted")
 	}
 }
+
+func TestClientIPHeader(t *testing.T) {
+	m := valid()
+	m["CLIENT_IP_HEADER"] = " Cf-Connecting-Ip "
+	c, err := Load(env(m))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.ClientIPHeader != "Cf-Connecting-Ip" {
+		t.Fatalf("header: %q", c.ClientIPHeader)
+	}
+}

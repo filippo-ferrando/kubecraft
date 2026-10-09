@@ -71,6 +71,8 @@ spec:
               value: {{ .Values.manager.sessionTTL | quote }}
             - name: ALLOWED_ORIGINS
               value: {{ .Values.manager.allowedOrigins | quote }}
+            - name: CLIENT_IP_HEADER
+              value: {{ .Values.manager.clientIPHeader | quote }}
             - name: JVM_HEAP_RATIO
               value: {{ .Values.manager.jvmHeapRatio | quote }}
             - name: DEFAULT_MAX_SERVERS

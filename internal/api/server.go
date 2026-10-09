@@ -4,6 +4,7 @@ package api
 import (
 	"context"
 	"io/fs"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -151,7 +152,9 @@ func (s *Server) readyz(w http.ResponseWriter, r *http.Request) {
 	}
 	if s.ready != nil {
 		if err := s.ready(ctx); err != nil {
-			writeError(w, http.StatusServiceUnavailable, err.Error())
+			// The endpoint is public through the ingress, so the detail only goes to the log.
+			slog.WarnContext(ctx, "readiness check failed", "err", err)
+			writeError(w, http.StatusServiceUnavailable, "not ready")
 			return
 		}
 	}

@@ -22,6 +22,7 @@ Chart: `charts/kubecraft`, published as `oci://git.internal.fferrando.cc/rdfilip
 | `manager.cookieSecure` | `true` | `false` only for plain HTTP tests |
 | `manager.sessionTTL` | `168h` | |
 | `manager.allowedOrigins` | `""` | Extra origins, comma separated |
+| `manager.clientIPHeader` | `""` | Header with the real client IP from the proxy, e.g. `Cf-Connecting-Ip`. Trusted only from private peers |
 | `manager.jvmHeapRatio` | `"0.75"` | Heap share of the memory limit |
 | `manager.defaultMaxServers` | `2` | Initial default quota; later changed in the UI |
 | `manager.storageClass` | `""` | World volumes; empty uses the default class |
@@ -93,6 +94,9 @@ See [playit.gg](../components/playit.md).
 | `networkPolicy.enabled` | `true` | |
 | `networkPolicy.managerFrom` | traefik namespace | Who may reach the UI |
 | `networkPolicy.metricsFrom` | monitoring namespace | Who may scrape |
+| `networkPolicy.serverEgress.enabled` | `true` | Game servers reach only DNS and the internet |
+| `networkPolicy.serverEgress.dnsTo` | kube-dns in kube-system | Where DNS queries go |
+| `networkPolicy.serverEgress.blockedCIDRs` | private, CGNAT, link local, loopback | Ranges game servers cannot reach |
 
 ## Templates
 
@@ -106,7 +110,7 @@ See [playit.gg](../components/playit.md).
 | `mc-router.yaml` | mc-router ServiceAccount, Role (services; statefulsets patch with auto scale), Deployment, Service |
 | `metrics.yaml` | Metrics Services and optional ServiceMonitor |
 | `playit-gateway.yaml` | With `playit.enabled`: ServiceAccount and Role (read Services), gateway Deployment with the gate and the playit agent |
-| `networkpolicy.yaml` | Manager: ingress namespace on 8080, scraper on 9090. mc-router: 25565 from anywhere. Game servers: 25565 from mc-router and manager, 25575 and 8081 from the manager |
+| `networkpolicy.yaml` | Manager: ingress namespace on 8080, scraper on 9090. mc-router: 25565 from anywhere. Game servers: 25565 from mc-router and manager, 25575 and 8081 from the manager; outbound only DNS and the internet |
 | `quota.yaml` | ResourceQuota and LimitRange |
 
 ## Sizing the ResourceQuota

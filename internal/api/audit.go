@@ -15,7 +15,7 @@ func (s *Server) audit(r *http.Request, userID uuid.NullUUID, action, target str
 	if details == nil {
 		details = map[string]any{}
 	}
-	details["ip"] = clientIP(r)
+	details["ip"] = s.clientIP(r)
 	b, err := json.Marshal(details)
 	if err != nil {
 		b = []byte("{}")

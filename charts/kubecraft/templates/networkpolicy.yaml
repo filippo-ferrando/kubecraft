@@ -74,6 +74,36 @@ spec:
       ports:
         - port: 25575
         - port: 8081
+{{- if .Values.networkPolicy.serverEgress.enabled }}
+---
+# Game servers run user chosen code: DNS and the internet only, no cluster or LAN.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "kubecraft.fullname" . }}-servers-egress
+  labels:
+    {{- include "kubecraft.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/managed-by: mc-manager
+  policyTypes: [Egress]
+  egress:
+    - to:
+        {{- toYaml .Values.networkPolicy.serverEgress.dnsTo | nindent 8 }}
+      ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            {{- with .Values.networkPolicy.serverEgress.blockedCIDRs }}
+            except:
+              {{- toYaml . | nindent 14 }}
+            {{- end }}
+{{- end }}
 {{- if .Values.playit.enabled }}
 ---
 # playit gateway: no inbound traffic at all; the agent dials out and reaches the
