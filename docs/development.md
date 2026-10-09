@@ -39,7 +39,7 @@ After editing `internal/db/queries/*.sql` or migrations, run `make sqlc` and com
 Forgejo Actions in `.forgejo/workflows`:
 
 - `ci.yaml` (pushes to main, pull requests): gofmt, vet, golangci-lint, Go tests with a Postgres service, web checks and build, chart lint, image build without push.
-- `release.yaml` (tags `v*.*.*`): tests, then pushes the image to `git.internal.fferrando.cc/rdfilippo/kubecraft` and the chart to `oci://git.internal.fferrando.cc/rdfilippo/kubecraft`, then publishes a release with the commits since the previous tag.
+- `release.yaml` (tags `v*.*.*`): tests, then pushes the image to `git.internal.fferrando.cc/rdfilippo/kubecraft-manager` and the chart to `oci://git.internal.fferrando.cc/rdfilippo/kubecraft`, then publishes a release with the commits since the previous tag.
 
 The repository secret `LOCAL_TOKEN` (access token with `write:package`) is required. `make e2e` needs a privileged Docker daemon, so it is a manual check before tagging.
 

@@ -2,8 +2,10 @@
 
 kubecraft ships as one image and one Helm chart, both published by the release workflow:
 
-- image `git.internal.fferrando.cc/rdfilippo/kubecraft:vX.Y.Z` (pulled as `git.fferrando.cc/rdfilippo/kubecraft`, same registry),
+- image `git.internal.fferrando.cc/rdfilippo/kubecraft-manager:vX.Y.Z` (pulled as `git.fferrando.cc/rdfilippo/kubecraft-manager`, same registry),
 - chart `oci://git.internal.fferrando.cc/rdfilippo/kubecraft`, version `X.Y.Z`, whose default image is the matching tag.
+
+The image and the chart use different names (`kubecraft-manager` and `kubecraft`) because they share one OCI registry: with the same name, the chart version `X.Y.Z` and the image tag `X.Y.Z` would overwrite each other.
 
 ## What must exist first
 

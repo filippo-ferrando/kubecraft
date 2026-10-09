@@ -1,6 +1,6 @@
 # Manager image (API + UI in one container).
 image:
-  repository: git.fferrando.cc/rdfilippo/kubecraft
+  repository: git.fferrando.cc/rdfilippo/kubecraft-manager
   # Defaults to the chart appVersion.
   tag: ""
   pullPolicy: IfNotPresent

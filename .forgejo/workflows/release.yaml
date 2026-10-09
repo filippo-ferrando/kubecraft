@@ -65,6 +65,7 @@ jobs:
         run: make chart-lint-local
 
   # One image runs the manager and, in "files" mode, the per-server file sidecar.
+  # It is named <repo>-manager so its tags never collide with the chart, pushed as <owner>/kubecraft.
   image:
     needs: test
     runs-on: ubuntu-latest
@@ -89,7 +90,7 @@ jobs:
           TAG: ${{ github.ref_name }}
           REPOSITORY: ${{ github.repository }}
         run: |
-          image=$(echo "$REGISTRY/$REPOSITORY" | tr '[:upper:]' '[:lower:]')
+          image=$(echo "$REGISTRY/$REPOSITORY-manager" | tr '[:upper:]' '[:lower:]')
           {
             echo "list<<EOF"
             echo "$image:$TAG"
@@ -144,7 +145,7 @@ jobs:
         run: |
           prev=$(git describe --tags --abbrev=0 "$TAG^" 2>/dev/null || true)
           owner=$(echo "${REPOSITORY%%/*}" | tr '[:upper:]' '[:lower:]')
-          image=$(echo "$REGISTRY/$REPOSITORY" | tr '[:upper:]' '[:lower:]')
+          image=$(echo "$REGISTRY/$REPOSITORY-manager" | tr '[:upper:]' '[:lower:]')
           {
             echo "Image: \`$image:$TAG\`"
             echo

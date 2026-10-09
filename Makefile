@@ -1,4 +1,4 @@
-IMAGE ?= git.fferrando.cc/rdfilippo/kubecraft
+IMAGE ?= git.fferrando.cc/rdfilippo/kubecraft-manager
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 TEST_DB_PORT ?= 55432
 TEST_DATABASE_URL ?= postgres://test:test@localhost:$(TEST_DB_PORT)/test?sslmode=disable

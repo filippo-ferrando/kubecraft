@@ -147,7 +147,7 @@ The bootstrap admin is only created when no users exist, and must change the pas
 
 ```yaml
 image:
-  repository: git.fferrando.cc/rdfilippo/kubecraft
+  repository: git.fferrando.cc/rdfilippo/kubecraft-manager
   tag: "0.1.0"
 manager:
   uiHost: mine.internal.fferrando.cc
@@ -311,7 +311,7 @@ For UI work, run `make run` and `cd web && npm run dev`. Vite proxies `/api` (in
 Forgejo Actions in `.forgejo/workflows`:
 
 - `ci.yaml`, on pushes to main and pull requests: gofmt, vet, golangci-lint, Go tests (with a Postgres service, so integration tests run), svelte-check, vitest, web build, chart lint, and an image build without push.
-- `release.yaml`, on a tag like `v0.2.0`: runs the tests again, pushes `git.internal.fferrando.cc/rdfilippo/kubecraft` with the tags `v0.2.0`, `0.2.0`, `0.2` and `latest` (pre-releases like `v0.3.0-rc1` only get their own tag), pushes the Helm chart to `oci://git.internal.fferrando.cc/rdfilippo/kubecraft` with version `0.2.0`, and publishes a release with the commits since the previous tag.
+- `release.yaml`, on a tag like `v0.2.0`: runs the tests again, pushes `git.internal.fferrando.cc/rdfilippo/kubecraft-manager` with the tags `v0.2.0`, `0.2.0`, `0.2` and `latest` (pre-releases like `v0.3.0-rc1` only get their own tag), pushes the Helm chart to `oci://git.internal.fferrando.cc/rdfilippo/kubecraft` with version `0.2.0`, and publishes a release with the commits since the previous tag.
 
 The packaged chart uses the tag as `appVersion`, so its default manager and file sidecar images are the released ones. The repository secret `LOCAL_TOKEN` must hold an access token with `write:package`. `make e2e` needs a privileged Docker daemon and stays a manual check before tagging.
 

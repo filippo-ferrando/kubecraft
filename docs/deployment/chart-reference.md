@@ -8,7 +8,7 @@ Chart: `charts/kubecraft`, published as `oci://git.internal.fferrando.cc/rdfilip
 
 | Value | Default | Notes |
 |---|---|---|
-| `image.repository` | `git.fferrando.cc/rdfilippo/kubecraft` | Manager and file sidecar |
+| `image.repository` | `git.fferrando.cc/rdfilippo/kubecraft-manager` | Manager and file sidecar |
 | `image.tag` | chart `appVersion` | Released charts pin the matching tag |
 | `image.pullPolicy` | `IfNotPresent` | |
 | `imagePullSecrets` | `[]` | Needed if the registry package is private |

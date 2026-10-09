@@ -21,7 +21,7 @@ External: PostgreSQL (for example CloudNativePG), Modrinth API, Mojang version l
 
 | Part | Image | Role |
 |---|---|---|
-| manager | `git.fferrando.cc/rdfilippo/kubecraft` | API, UI, reconciler, poller, metrics |
+| manager | `git.fferrando.cc/rdfilippo/kubecraft-manager` | API, UI, reconciler, poller, metrics |
 | files sidecar | same image, started as `manager files` | File listing, editing and backups for one server |
 | mc-router | `itzg/mc-router` | Routes Minecraft connections by hostname, wakes and puts servers to sleep |
 | game server | `itzg/minecraft-server` | One per server, in a StatefulSet |
