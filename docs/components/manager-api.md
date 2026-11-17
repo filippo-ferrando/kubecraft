@@ -63,4 +63,4 @@ Logins, failed logins, server actions, console commands, player changes, file wr
 
 ## Configuration
 
-See the table in the main README. Notable: `SESSION_SECRET` is required, `METRICS_ADDR` set to an empty value disables metrics, `FILES_IMAGE` empty disables files and backups, `AUTO_SLEEP` tells the UI whether mc-router can scale servers.
+All variables are in [Configuration](../configuration.md). Notable: `SESSION_SECRET` is required, `METRICS_ADDR` set to an empty value disables metrics, `FILES_IMAGE` empty disables files and backups, `AUTO_SLEEP` tells the UI whether mc-router can scale servers.
